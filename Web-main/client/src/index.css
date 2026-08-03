@@ -1,0 +1,226 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #EE0033;
+  --color-primary-hover: #D6002A;
+  --color-secondary: #0F172A;
+  --color-accent: #EE0033;
+  --color-viettel-red: #EE0033;
+  --color-viettel-dark: #0B0F19;
+  --color-viettel-light: #F8FAFC;
+
+  --animate-float: float 4s ease-in-out infinite;
+  --animate-shake: shake 0.4s ease-in-out;
+  --animate-fade-in: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-slide-up: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-scale-up: scaleUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+
+  @keyframes float {
+
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+
+    50% {
+      transform: translateY(-6px);
+    }
+  }
+
+  @keyframes shake {
+
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+
+    25% {
+      transform: translateX(-3px);
+    }
+
+    75% {
+      transform: translateX(3px);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      transform: translateY(12px);
+      opacity: 0;
+    }
+
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes scaleUp {
+    from {
+      transform: scale(0.96);
+      opacity: 0;
+    }
+
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+}
+
+/* Custom CSS utilities and scrollbar */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background: #FAFAFB;
+    color: #334155;
+    overflow-x: hidden;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #F1F5F9;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 9999px;
+    border: 2px solid #F1F5F9;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #EE0033;
+  }
+}
+
+/* Modern Apple / Stripe design style cards and panels */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(241, 245, 249, 0.9);
+}
+
+.glass-panel-light {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(241, 245, 249, 0.6);
+}
+
+.text-gradient-viettel {
+  background: linear-gradient(135deg, #EE0033 0%, #FF4D73 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.bg-gradient-viettel {
+  background: linear-gradient(135deg, #EE0033 0%, #D6002A 100%);
+}
+
+.bg-gradient-premium {
+  background: linear-gradient(135deg, #0B0F19 0%, #1E293B 100%);
+}
+
+.card-hover-effect {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-hover-effect:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -10px rgba(15, 23, 42, 0.08), 0 4px 12px -5px rgba(15, 23, 42, 0.03);
+  border-color: rgba(238, 0, 51, 0.25);
+}
+
+/* Custom utility class to hide scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Premium input focus ring helper */
+.input-premium-focus {
+  transition: all 0.2s ease;
+}
+
+.input-premium-focus:focus {
+  border-color: rgba(238, 0, 51, 0.4);
+  box-shadow: 0 0 0 3px rgba(238, 0, 51, 0.1);
+  background-color: #FFFFFF;
+}
+
+/* Utility animation delay classes */
+.delay-100 {
+  animation-delay: 100ms;
+}
+
+.delay-200 {
+  animation-delay: 200ms;
+}
+
+.delay-300 {
+  animation-delay: 300ms;
+}
+
+/* Bot message custom typography styles for package info */
+.bot-msg-markdown p {
+  margin-bottom: 0.5rem;
+}
+.bot-msg-markdown p:last-child {
+  margin-bottom: 0;
+}
+.bot-msg-markdown strong {
+  font-weight: 700;
+  color: var(--color-secondary);
+}
+.bot-msg-markdown ul, .bot-msg-markdown ol {
+  padding-left: 1.25rem;
+  margin-bottom: 0.5rem;
+  list-style-type: disc;
+}
+.bot-msg-markdown li {
+  margin-bottom: 0.25rem;
+}
+.bot-msg-markdown h1, .bot-msg-markdown h2, .bot-msg-markdown h3 {
+  font-weight: 700;
+  margin-top: 0.75rem;
+  margin-bottom: 0.35rem;
+  color: var(--color-secondary);
+}
+.bot-msg-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+.bot-msg-markdown th, .bot-msg-markdown td {
+  border: 1px solid #E2E8F0;
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+}
+.bot-msg-markdown th {
+  background-color: #F8FAFC;
+}

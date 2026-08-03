@@ -1,0 +1,44 @@
+{
+  "benefit_group": {
+    "youtube": 15,
+    "tiktok": 15,
+    "facebook": 15,
+    "movie": 15,
+    "social_any": 10
+  },
+  "tv360": 15,
+  "description_keywords": 8,
+  "data_features": {
+    "has_real_data": 6,
+    "is_data_base": 4
+  },
+  "voice_features": 6,
+  "five_g": 10,
+  "combo": {
+    "is_combo": 12,
+    "both_data_voice": 8
+  },
+  "addon": 10,
+  "cheap_data": {
+    "is_cheap": 12,
+    "is_base": 6,
+    "long_cycle": 5,
+    "short_cycle_penalty": -20
+  },
+  "long_term": {
+    "base": 10,
+    "data_combo_bonus": 8
+  },
+  "min_days_bonus": 8,
+  "yearly": 12,
+  "price_segment": {
+    "cheap": 5,
+    "expensive": 10
+  },
+  "penalties": {
+    "too_short": -20,
+    "mid_term_unwanted": -5,
+    "yearly_unwanted": -30,
+    "wrong_addon": -10
+  }
+}
