@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRightLeft, X, Plus, Check, ShieldAlert, Wifi } from 'lucide-react';
+import { ArrowRightLeft, X, Plus, Check, ShieldAlert, Wifi, Globe } from 'lucide-react';
 import { usePackageStore, useAuthStore } from '../store';
 import type { Package } from '../types';
 import SEO from '../components/SEO';
 import RegisterModal from '../components/RegisterModal';
 import CompareAI from '../components/CompareAI';
 import { compareApi } from '../services/api';
+import { isValidDailyData } from '../utils/filterHelper';
 
 interface RowSpec {
   key: string;
@@ -287,44 +288,53 @@ export default function Compare() {
       key: 'data',
       label: 'Dung lượng Data',
       getValue: (pkg) => {
-        if (isValid(pkg.data_theo_ngay)) return pkg.data_theo_ngay;
+        if (isValidDailyData(pkg.data_theo_ngay)) return pkg.data_theo_ngay;
         if (isValid(pkg.data_meta)) return pkg.data_meta;
         if (isValid(pkg.tien_ich_free)) return pkg.tien_ich_free;
         return null;
       },
       renderCell: (pkg) => {
-        const hasWebData = isValid(pkg.data_theo_ngay);
+        const hasWebData = isValidDailyData(pkg.data_theo_ngay);
         const hasMetaData = isValid(pkg.data_meta);
         const hasUtility = isValid(pkg.tien_ich_free);
 
-        // 1. Trường hợp Gói Data Toàn Mạng (Có data_theo_ngay hợp lệ, VD: SD90, SD120)
-        if (hasWebData) {
+        // Trường hợp 3: Gói có CẢ Data đa dụng lẫn Data Meta (như 12FB30)
+        if (hasWebData && hasMetaData) {
           return (
             <div className="flex flex-col space-y-1">
               <div className="flex items-center text-slate-900 font-extrabold text-[13px]">
                 <Wifi className="w-3.5 h-3.5 text-primary mr-1 shrink-0 inline" />
-                <span>{normalizeDataLimit(pkg.data_theo_ngay)}</span>
+                <span>{normalizeDataLimit(pkg.data_theo_ngay!)}</span>
               </div>
-              {hasMetaData && (
-                <div className="flex items-center text-blue-600 font-semibold text-[11px] pl-4">
-                  <span>+ Data Meta: {pkg.data_meta}</span>
-                </div>
-              )}
+              <div className="flex items-center text-blue-600 font-semibold text-[11px] pl-4">
+                <Globe className="w-3.5 h-3.5 text-blue-500 mr-1 shrink-0 inline" />
+                <span>+ Data Meta: {pkg.data_meta}</span>
+              </div>
             </div>
           );
         }
 
-        // 2. Trường hợp data_theo_ngay bằng '0' (hoặc trống) NHƯNG CÓ data_meta hợp lệ
-        if (hasMetaData) {
+        // Trường hợp 1: Gói chỉ có Data đa dụng (như SD90, SD135)
+        if (hasWebData) {
           return (
             <div className="flex items-center text-slate-900 font-extrabold text-[13px]">
               <Wifi className="w-3.5 h-3.5 text-primary mr-1 shrink-0 inline" />
+              <span>{normalizeDataLimit(pkg.data_theo_ngay!)}</span>
+            </div>
+          );
+        }
+
+        // Trường hợp 2: Gói chỉ có Data Meta (như 6FB50K) — Hiển thị trực tiếp data_meta kèm icon Meta 🌐, KHÔNG render dòng phụ
+        if (hasMetaData) {
+          return (
+            <div className="flex items-center text-slate-900 font-extrabold text-[13px]">
+              <Globe className="w-3.5 h-3.5 text-blue-500 mr-1 shrink-0 inline" />
               <span>{String(pkg.data_meta).toLowerCase().includes('meta') ? pkg.data_meta : `Meta: ${pkg.data_meta}`}</span>
             </div>
           );
         }
 
-        // 3. Trường hợp Gói Data Tiện Ích Khác
+        // Trường hợp 4: Gói Data Tiện Ích Khác
         if (hasUtility) {
           return (
             <span className="font-semibold text-slate-800 text-xs">

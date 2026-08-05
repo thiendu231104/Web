@@ -110,19 +110,37 @@ export function toEnglishPackage(vnPkg: Partial<Package>): any {
   const category = socialFreeApps.length > 0 ? 'social' : voiceFreeInternalMin > 0 ? 'combo' : 'data';
 
   return {
+    ...vnPkg,
     id: vnPkg.id,
     name: vnPkg.ten,
+    ten: vnPkg.ten,
     ma_goi: vnPkg.ma_goi || vnPkg.ten || '',
     price,
+    gia: price,
     duration,
     durationDays,
+    chu_ky_ngay: durationDays,
     dataLimit: vnPkg.data_theo_ngay || '0 GB',
+    data_theo_ngay: vnPkg.data_theo_ngay || '',
+    data_meta: vnPkg.data_meta || null,
     dataPerDayGb: vnPkg.data_theo_ngay ? (parseFloat(vnPkg.data_theo_ngay.replace(',', '.').match(/(\d+(\.\d+)?)/)?.[1] || '0')) : 0,
     voiceFreeInternalMin,
     voiceFreeExternalMin,
+    free_noi_mang: voiceFreeInternalMin,
+    free_ngoai_mang: voiceFreeExternalMin,
+    sms: typeof vnPkg.sms === 'number' ? vnPkg.sms : (parseInt(String(vnPkg.sms || '0')) || 0),
     socialFreeApps,
     description: vnPkg.uudaitrong || '',
-    conditions: vnPkg.dieu_kien_dang_ky || '',
+    uudaitrong: vnPkg.uudaitrong || '',
+    conditions: vnPkg.dieu_kien_dang_ky || vnPkg.doi_tuong_ap_dung || '',
+    doi_tuong_ap_dung: vnPkg.dieu_kien_dang_ky || vnPkg.doi_tuong_ap_dung || '',
+    tien_ich_free: vnPkg.tien_ich_free || null,
+    noi_dung_ngoai: vnPkg.noi_dung_ngoai || null,
+    dangky: vnPkg.dangky || null,
+    huygiahan: vnPkg.huygiahan || null,
+    huygoicuoc: vnPkg.huygoicuoc || null,
+    dohot: vnPkg.dohot || 'normal',
+    phan_loai_goi: vnPkg.phan_loai_goi || 'Data',
     terms: [
       vnPkg.chinh_sach_ap_dung || 'Áp dụng cho thuê bao Viettel di động.',
       vnPkg.dangky ? `Cách đăng ký: ${vnPkg.dangky}` : '',
@@ -443,10 +461,10 @@ export const transactionApi = {
 // 5. Chatbot APIs
 export const chatbotApi = {
   sendMessage: async (message: string, sessionId?: string | null, guestInfo?: any): Promise<{ text: string; suggestedAction?: any; packages?: Package[]; recommendedPackages?: Package[] }> => {
-    const response = await axiosInstance.post<{ success: boolean; message: string; data: any }>('/api/chatbot/message', { 
-      message, 
-      sessionId, 
-      guestInfo 
+    const response = await axiosInstance.post<{ success: boolean; message: string; data: any }>('/api/chatbot/message', {
+      message,
+      sessionId,
+      guestInfo
     });
 
     const rawData = response.data.data;
@@ -485,16 +503,16 @@ export const chatbotApi = {
     return response.data.success;
   },
 
-  getAdminHistory: async (params?: { 
-    page?: number; 
-    limit?: number; 
-    search?: string; 
-    source?: string; 
-    startDate?: string; 
-    endDate?: string; 
-  }): Promise<{ 
-    data: any[]; 
-    pagination: { total: number; page: number; limit: number; pages: number } 
+  getAdminHistory: async (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    source?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<{
+    data: any[];
+    pagination: { total: number; page: number; limit: number; pages: number }
   }> => {
     const response = await axiosInstance.get<{ success: boolean; data: any[]; pagination: any }>('/api/chatbot/admin/history', { params });
     const formattedData = (response.data.data || []).map(item => ({
@@ -632,7 +650,7 @@ export const contactApi = {
     const response = await axiosInstance.post<{ success: boolean; message: string; data: Contact }>('/api/contact', contactData);
     return response.data;
   },
-  
+
   fetchContacts: async (): Promise<Contact[]> => {
     const response = await axiosInstance.get<{ success: boolean; data: Contact[] }>('/api/contact');
     return response.data.data;

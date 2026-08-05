@@ -260,8 +260,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await get().fetchSubscriptionHistory().catch(() => { });
       await get().fetchTransactions().catch(() => { });
 
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: result?.message || 'Đăng ký gói cước thành công!',
         balance: result?.balance
       };
@@ -701,9 +701,15 @@ export const usePackageStore = create<PackageState>((set, get) => ({
     try {
       const res = await packageApi.updatePackage(id, updated);
       if (res.success) {
+        const isMatch = (p: Package) =>
+          p._id === id ||
+          p.id === id ||
+          String(p.package_id) === String(id) ||
+          p.ma_goi?.toLowerCase() === String(id).toLowerCase();
+
         set(state => ({
-          packages: state.packages.map(p => p.id === id ? res.package : p),
-          compareList: state.compareList.map(p => p.id === id ? res.package : p),
+          packages: state.packages.map(p => isMatch(p) ? res.package : p),
+          compareList: state.compareList.map(p => isMatch(p) ? res.package : p),
           loading: false
         }));
         return true;
@@ -725,9 +731,15 @@ export const usePackageStore = create<PackageState>((set, get) => ({
     try {
       const res = await packageApi.deletePackage(id);
       if (res.success) {
+        const isMatch = (p: Package) =>
+          p._id === id ||
+          p.id === id ||
+          String(p.package_id) === String(id) ||
+          p.ma_goi?.toLowerCase() === String(id).toLowerCase();
+
         set(state => ({
-          packages: state.packages.filter(p => p.id !== id),
-          compareList: state.compareList.filter(p => p.id !== id),
+          packages: state.packages.filter(p => !isMatch(p)),
+          compareList: state.compareList.filter(p => !isMatch(p)),
           loading: false
         }));
         return true;
@@ -896,14 +908,14 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
     try {
       const currentAnswers = get().answers;
       const currentStack = get().historyStack;
-      
+
       const newAnswers = {
         ...currentAnswers,
         [field]: value
       };
 
       const res = await surveyApi.submitAnswers(newAnswers);
-      
+
       set({
         answers: res.answers,
         nextQuestion: res.nextQuestion,
@@ -926,7 +938,7 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
   goBack: async () => {
     const stack = get().historyStack;
     if (stack.length === 0) return;
-    
+
     set({ loading: true });
     const prevAnswers = stack[stack.length - 1];
     const newStack = stack.slice(0, -1);

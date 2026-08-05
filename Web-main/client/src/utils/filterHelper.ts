@@ -2,6 +2,25 @@ import type { Package, User } from '../types';
 import { canViewPackage } from './permission';
 
 /**
+ * Checks whether a `data_theo_ngay` string contains valid daily high-speed data (> 0.1 GB).
+ * Returns false if string is zero, empty, "0GB/ngày", "0 GB", null/undefined, or number <= 0.1.
+ */
+export function isValidDailyData(val: string | null | undefined): boolean {
+  if (!val) return false;
+  const str = String(val).trim().toLowerCase();
+  if (!str || str === '0' || str === 'null' || str === 'undefined' || str === 'false') return false;
+
+  // Check for explicit zero data patterns at start
+  if (/^0\s*(gb|mb|\/|\s|$)/i.test(str) || /^0\/ngày/i.test(str)) return false;
+
+  // Extract first floating-point or integer number from string
+  const match = str.match(/(\d+(?:\.\d+)?)/);
+  if (!match) return false;
+  const num = parseFloat(match[1]);
+  return !isNaN(num) && num > 0.1;
+}
+
+/**
  * Filters and sorts packages on the client-side based on filter configurations and user roles.
  */
 export function filterPackagesLocally(
@@ -59,9 +78,8 @@ export function filterPackagesLocally(
   if (filters.data && filters.data !== 'all') {
     const hasData = filters.data === 'yes' || filters.data === 'true';
     list = list.filter(pkg => {
-      const dataStr = pkg.data_theo_ngay || '0';
-      const isZero = dataStr === '0' || dataStr === '0GB' || dataStr === '';
-      return hasData ? !isZero : isZero;
+      const valid = isValidDailyData(pkg.data_theo_ngay);
+      return hasData ? valid : !valid;
     });
   }
 

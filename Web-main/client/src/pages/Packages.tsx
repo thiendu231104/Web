@@ -51,9 +51,9 @@ export default function Packages() {
     showToast('error', msg);
   }, []);
 
-  const keywordParam = searchParams.get('keyword') || '';
+  const keywordParam = searchParams.get('search') || searchParams.get('keyword') || '';
 
-  // 1. Sync URL keyword query parameter to store search & filter, then fetch packages from backend exactly once per change
+  // 1. Sync URL search/keyword query parameter to store search & filter, then fetch packages from backend
   useEffect(() => {
     usePackageStore.getState().setSearch(keywordParam);
     usePackageStore.getState().setFilter('keyword', keywordParam);

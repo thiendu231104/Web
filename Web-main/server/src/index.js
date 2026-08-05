@@ -26,7 +26,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
 
-// Security Middlewares (Helmet Equivalent Security Headers)
+// Security Middlewares
 app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -73,24 +73,6 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Connect to MongoDB
-if (!mongoUri) {
-  console.error("CRITICAL ERROR: MONGODB_URI environment variable is missing!");
-  process.exit(1);
-}
-
-mongoose.connect(mongoUri, { dbName: 'goicuocviettel' })
-  .then(() => {
-    console.log("Successfully connected to MongoDB database: goicuocviettel");
-    
-    // Auto-seed FAQs and Chatbot Configuration on server startup if collections are empty
-    chatbotService.checkAndSeedChatbot().catch(err => console.error("Chatbot seed failed:", err));
-    surveyService.checkAndSeedSurveyConfigs().catch(err => console.error("Survey config seed failed:", err));
-  })
-  .catch((err) => {
-    console.error("Database connection failure:", err);
-  });
-
 // Logging middleware
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -121,7 +103,40 @@ app.get('/', (req, res) => {
 // Global Error Handler Middleware
 app.use(globalErrorHandler);
 
-// Start Server
-app.listen(PORT, () => {
-  console.log(`Express API Server is running on port: ${PORT}`);
+// Connect to MongoDB and start Express server safely
+if (!mongoUri) {
+  console.error("CRITICAL ERROR: MONGODB_URI environment variable is missing!");
+  process.exit(1);
+}
+
+const startServer = async () => {
+  try {
+    await mongoose.connect(mongoUri, {
+      dbName: 'goicuocviettel',
+      serverSelectionTimeoutMS: 5000
+    });
+    console.log("MongoDB Connected Successfully to database: goicuocviettel");
+
+    // Auto-seed FAQs and Chatbot Configuration on server startup if collections are empty
+    chatbotService.checkAndSeedChatbot().catch(err => console.error("Chatbot seed failed:", err));
+    surveyService.checkAndSeedSurveyConfigs().catch(err => console.error("Survey config seed failed:", err));
+
+    // Start Express API Server ONLY after MongoDB connection is confirmed
+    app.listen(PORT, () => {
+      console.log(`Express API Server is running on port: ${PORT}`);
+    });
+  } catch (err) {
+    console.error("Database connection failure:", err.message || err);
+    process.exit(1);
+  }
+};
+
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB runtime connection error:', err.message || err);
 });
+
+mongoose.connection.on('disconnected', () => {
+  console.warn('MongoDB connection lost.');
+});
+
+startServer();

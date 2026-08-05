@@ -164,11 +164,11 @@ export default function Home() {
   // ── Section refs for smooth scroll ───────────────────────────────────────
   const packagesSectionRef = useRef<HTMLElement>(null);
 
-  // ── Auto-fetch packages on mount if store is empty ───────────────────────
+  // ── Auto-reset search filters and fetch packages on mount ────────────────
   useEffect(() => {
-    if (packages.length === 0 && !pkgLoading) {
-      fetchPackages({ limit: 999, page: 1 });
-    }
+    const store = usePackageStore.getState();
+    store.reset();
+    fetchPackages({ limit: 999, page: 1, search: '' });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Helpers ──────────────────────────────────────────────────────────────

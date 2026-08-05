@@ -2,444 +2,464 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Wifi, Plus, Edit2, Trash2, X, AlertCircle, Sparkles } from 'lucide-react';
+import {
+  Wifi, Plus, Edit2, Trash2, X, AlertCircle, Sparkles,
+  ChevronLeft, ChevronRight, Search, SlidersHorizontal
+} from 'lucide-react';
 import { usePackageStore } from '../../store';
 import type { Package } from '../../types';
 
-// Zod Validation Schema for CRUD Packages in Vietnamese
-const packageFormSchema = z.object({
-  ma_goi: z.string().min(2, { message: 'Mã gói phải chứa từ 2 ký tự' }),
-  ten: z.string().min(2, { message: 'Tên gói phải chứa từ 2 ký tự' }),
-  gia: z.number().min(0, { message: 'Giá cước không được là số âm' }),
-  phan_loai_goi: z.enum(['Data', 'Combo', 'Social', 'Thoại']),
-  data_theo_ngay: z.string().min(1, { message: 'Giới hạn dung lượng không được để trống' }),
-  free_noi_mang: z.string(),
-  free_ngoai_mang: z.string(),
-  sms: z.string(),
-  tienich: z.string(),
-  dieu_kien_dang_ky: z.string().min(2, { message: 'Điều kiện đăng ký không được để trống' }),
-  chinh_sach_ap_dung: z.string().min(5, { message: 'Chính sách áp dụng không được để trống' }),
-  noi_dung_ngoai: z.string(),
-  tien_ich_free: z.string(),
-  data_meta: z.string().optional(),
-  uudaitrong: z.string().min(5, { message: 'Mô tả chi tiết tối thiểu 5 ký tự' }),
-  chu_ky_ngay: z.string().min(1, { message: 'Chu kỳ không được để trống' }),
-  dangky: z.string(),
-  huygiahan: z.string(),
-  huygoicuoc: z.string(),
-  dohot: z.enum(['Hot', 'normal']),
-  system_type: z.string().min(1, { message: 'Loại hệ thống không được để trống' }),
-  benefit_group: z.string().min(1, { message: 'Nhóm ưu đãi không được để trống' }),
-  is_addon: z.boolean(),
-  is_long_term: z.boolean(),
-  requires_base_package: z.boolean(),
-  allow_parallel_with_str: z.string()
+// ─── UI LOCALIZATION MAP (Từ Điển Việt Hóa Nhãn Hiển Thị) ─────────────────
+const FIELD_LABELS: Record<string, string> = {
+  ma_goi: 'Mã Gói Cước',
+  ten: 'Tên Hiển Thị Gói Cước',
+  gia: 'Giá Cước (VNĐ)',
+  chu_ky_ngay: 'Chu Kỳ Sử Dụng (Ngày)',
+  cycle_type: 'Loại Chu Kỳ',
+  dohot: 'Mức Độ Nổi Bật',
+  phan_loai_goi: 'Phân Loại Gói (Data / Combo)',
+  data_theo_ngay: 'Data Đa Dụng (Ngày/Tháng)',
+  data_meta: 'Data Mạng Xã Hội (Meta)',
+  free_noi_mang: 'Phút Gọi Nội Mạng Miễn Phí',
+  free_ngoai_mang: 'Phút Gọi Ngoại Mạng Miễn Phí',
+  sms: 'SMS Miễn Phí',
+  tien_ich_free: 'Ứng Dụng Miễn Phí Data',
+  doi_tuong_ap_dung: 'Đối Tượng Thuê Bao Áp Dụng',
+  uudaitrong: 'Mô Tả Chi Tiết Ưu Đãi',
+  dangky: 'Cú Pháp Đăng Ký SMS',
+  huygiahan: 'Cú Pháp Hủy Gia Hạn',
+  huygoicuoc: 'Cú Pháp Hủy Gói Cước',
+  is_auto_renew: 'Tự Động Gia Hạn',
+  is_addon: 'Gói Cước Bổ Trợ (Add-on)',
+  requires_base_package: 'Yêu Cầu Gói Nền',
+  service_group: 'Nhóm Dịch Vụ',
+  system_type: 'Phân Hệ Hệ Thống (system_type)',
+  benefit_group: 'Nhóm Ưu Đãi Chính (benefit_group)',
+  registration_policy: 'Chính Sách Đăng Ký (registration_policy)',
+  allow_parallel_with: 'Phân Hệ Cho Phép Chạy Song Song (allow_parallel_with)',
+};
+
+const CYCLE_TYPE_LABELS: Record<string, string> = {
+  DAY: 'Ngày (DAY)',
+  MONTH: 'Tháng (MONTH)',
+  YEAR: 'Năm (YEAR)',
+};
+
+const SYSTEM_TYPE_LABELS: Record<string, string> = {
+  DATA_BASE: 'DATA_BASE – Gói Data Nền Chính (Nền tảng chính)',
+  DATA_UTILITY: 'DATA_UTILITY – Gói Phụ Meta/MXH (Tiện ích bổ sung)',
+  VOICE_SMS: 'VOICE_SMS – Gói Chuyên Thoại & Tin Nhắn',
+  COMBO: 'COMBO – Gói Combo Thoại + Data',
+  ADDON: 'ADDON – Gói Nạp Thêm Lưu Lượng (Add-on)',
+};
+
+const REG_POLICY_LABELS: Record<string, string> = {
+  ALLOW: 'ALLOW – Cho phép người dùng đăng ký chạy song song với gói khác',
+  REJECT: 'REJECT – Hủy/Từ chối nếu người dùng đang dùng gói cùng nhóm',
+  REPLACE: 'REPLACE – Cho phép đăng ký và tự động ghi đè/thay thế gói cũ',
+};
+
+const PARALLEL_OPTIONS = [
+  { value: 'DATA_BASE', label: 'DATA_BASE – Gói Data Nền Chuẩn' },
+  { value: 'DATA_UTILITY', label: 'DATA_UTILITY – Gói Data Tiện Ích Bổ Sung (Meta/TikTok/TV360)' },
+  { value: 'VOICE_SMS', label: 'VOICE_SMS – Gói Thoại & Tin Nhắn' },
+  { value: 'COMBO', label: 'COMBO – Gói Cước Combo' },
+  { value: 'ADDON', label: 'ADD_ON – Gói Cước Mua Thêm' },
+];
+
+// ─── ZOD VALIDATION SCHEMA (Chuẩn goi_cuoc Mongo Schema) ───────────────────
+export const packageFormSchema = z.object({
+  // TAB 1: Thông Tin Cơ Bản & Cú Pháp SMS
+  ma_goi: z.string().min(2, 'Mã gói tối thiểu 2 ký tự'),
+  ten: z.string().min(2, 'Tên gói tối thiểu 2 ký tự'),
+  gia: z.coerce.number().min(0, 'Giá cước không được âm'),
+  chu_ky_ngay: z.coerce.number().min(1, 'Chu kỳ tối thiểu 1 ngày'),
+  cycle_type: z.enum(['DAY', 'MONTH', 'YEAR']).default('MONTH'),
+  dohot: z.enum(['Hot', 'normal']).default('normal'),
+  phan_loai_goi: z.enum(['Data', 'Combo']).default('Data'),
+  dangky: z.string().optional().default(''),
+  huygiahan: z.string().optional().default(''),
+  huygoicuoc: z.string().optional().default(''),
+
+  // TAB 2: Thông Số Data & Ưu Đãi
+  data_theo_ngay: z.string().optional().default('0 GB'),
+  data_meta: z.string().optional().default(''),
+  free_noi_mang: z.coerce.number().optional().default(0),
+  free_ngoai_mang: z.coerce.number().optional().default(0),
+  sms: z.coerce.number().optional().default(0),
+  tien_ich_free: z.string().optional().default(''),
+  doi_tuong_ap_dung: z.string().optional().default('pho_thong,tra_sau'),
+  uudaitrong: z.string().min(2, 'Mô tả ưu đãi tối thiểu 2 ký tự'),
+
+  // TAB 3: Cấu Hình Hệ Thống & Quy Tắc
+  service_group: z.enum(['DATA', 'COMBO']).default('DATA'),
+  system_type: z.enum(['DATA_BASE', 'COMBO', 'DATA_UTILITY', 'VOICE_SMS', 'ADDON']).default('DATA_BASE'),
+  benefit_group: z.enum(['APP_META', 'DATA_MAIN', 'COMBO', 'APP_TV360', 'APP_YOUTUBE', 'APP_TIKTOK']).default('DATA_MAIN'),
+  registration_policy: z.enum(['ALLOW', 'REJECT', 'REPLACE']).default('ALLOW'),
+  allow_parallel_with: z.array(z.string()).default([]),
+  is_auto_renew: z.boolean().default(true),
+  is_addon: z.boolean().default(false),
+  requires_base_package: z.boolean().default(false),
 });
 
-type PackageFormValues = z.infer<typeof packageFormSchema>;
+export type PackageFormData = z.infer<typeof packageFormSchema>;
+
+// ─── DEFAULT FORM VALUES ───────────────────────────────────────────────────
+const DEFAULT_FORM_VALUES: PackageFormData = {
+  ma_goi: '',
+  ten: '',
+  gia: 90000,
+  chu_ky_ngay: 30,
+  cycle_type: 'MONTH',
+  dohot: 'normal',
+  phan_loai_goi: 'Data',
+  dangky: '',
+  huygiahan: '',
+  huygoicuoc: '',
+  data_theo_ngay: '0 GB',
+  data_meta: '',
+  free_noi_mang: 0,
+  free_ngoai_mang: 0,
+  sms: 0,
+  tien_ich_free: '',
+  doi_tuong_ap_dung: 'pho_thong,tra_sau',
+  uudaitrong: '',
+  service_group: 'DATA',
+  system_type: 'DATA_BASE',
+  benefit_group: 'DATA_MAIN',
+  registration_policy: 'ALLOW',
+  allow_parallel_with: [],
+  is_auto_renew: true,
+  is_addon: false,
+  requires_base_package: false,
+};
 
 function LoadingSkeleton() {
   return (
     <tbody className="divide-y divide-slate-100 animate-pulse">
       {[1, 2, 3, 4, 5, 6].map((n) => (
         <tr key={n}>
-          <td className="p-4"><div className="h-4 bg-slate-200 rounded w-24" /></td>
-          <td className="p-4"><div className="h-4 bg-slate-200 rounded w-16" /></td>
-          <td className="p-4"><div className="h-4 bg-slate-200 rounded w-16" /></td>
-          <td className="p-4"><div className="h-4 bg-slate-200 rounded w-12" /></td>
-          <td className="p-4"><div className="h-4 bg-slate-200 rounded w-28" /></td>
-          <td className="p-4 flex items-center justify-center space-x-2"><div className="h-7 bg-slate-200 rounded w-16" /></td>
+          {[1, 2, 3, 4, 5, 6, 7, 8].map(c => (
+            <td key={c} className="p-3">
+              <div className="h-3.5 bg-slate-200 rounded w-full max-w-[120px]" />
+            </td>
+          ))}
         </tr>
       ))}
     </tbody>
   );
 }
 
+function FieldWrapper({ label, children, error }: { label: string; children: React.ReactNode; error?: string }) {
+  return (
+    <div className="flex flex-col space-y-1">
+      <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">{label}</label>
+      {children}
+      {error && <p className="text-[10px] text-red-500">{error}</p>}
+    </div>
+  );
+}
+
+const inputClass = "w-full bg-slate-50 border border-slate-200 focus:border-primary/60 focus:bg-white rounded-lg py-2 px-3 text-slate-700 text-xs focus:outline-none transition-colors";
+const selectClass = "w-full bg-slate-50 border border-slate-200 focus:border-primary/60 focus:bg-white rounded-lg py-2 px-3 text-slate-700 text-xs focus:outline-none transition-colors cursor-pointer";
+
 export default function AdminPackages() {
-  const { packages, addPackage, updatePackage, deletePackage, fetchPackages, totalPages, totalItems, loading } = usePackageStore();
-  
-  const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const {
+    packages, addPackage, updatePackage, deletePackage, fetchPackages,
+    totalPages, totalItems, loading
+  } = usePackageStore();
+
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingPkg, setEditingPkg] = useState<Package | null>(null);
   const [deleteConfirmPkg, setDeleteConfirmPkg] = useState<Package | null>(null);
+  const [activeTab, setActiveTab] = useState<1 | 2 | 3>(1);
 
-  // Tab State inside Modal Form
-  const [activeTab, setActiveTab] = useState<'general' | 'system' | 'policy'>('general');
-
-  // Filter & Pagination states
-  const [searchVal, setSearchVal] = useState('');
+  // ─── TỰ DO LOCAL SEARCH ADMIN DÀNH RIÊNG ────────────────────────────────
+  const [searchTerm, setSearchTerm] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [filterCategory, setFilterCategory] = useState<'all' | 'Data' | 'Combo' | 'Social' | 'Thoại'>('all');
-  const [filterNetwork, setFilterNetwork] = useState<'all' | '4G' | '5G'>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
+  const itemsPerPage = 10;
 
-  // Search debounce handler
+  // Debounce search nội bộ Admin (không gửi/ghi đè vào Global State của Client)
   useEffect(() => {
-    const handler = setTimeout(() => {
-      setSearchKeyword(searchVal);
-      setCurrentPage(1);
-    }, 450);
-    return () => clearTimeout(handler);
-  }, [searchVal]);
+    const t = setTimeout(() => { setSearchKeyword(searchTerm); setCurrentPage(1); }, 420);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
 
-  // Fetch package list on filter/page change
+  const buildFetchParams = (page = currentPage) => ({
+    page, limit: itemsPerPage,
+    search: searchKeyword,
+    sort: 'price_asc',
+  });
+
   useEffect(() => {
-    fetchPackages({
-      page: currentPage,
-      limit: itemsPerPage,
-      search: searchKeyword,
-      category: filterCategory !== 'all' ? filterCategory : undefined,
-      network: filterNetwork !== 'all' ? filterNetwork : undefined,
-      sort: 'price_asc'
-    });
-  }, [currentPage, searchKeyword, filterCategory, filterNetwork, fetchPackages]);
+    fetchPackages(buildFetchParams());
+  }, [currentPage, searchKeyword, fetchPackages]);
 
   const showToast = (type: 'success' | 'error', text: string) => {
-    setToastMsg({ type, text });
-    setTimeout(() => setToastMsg(null), 3000);
+    setToast({ type, text });
+    setTimeout(() => setToast(null), 3200);
   };
 
   const {
     register,
     handleSubmit,
     reset,
-    formState: { errors }
-  } = useForm<PackageFormValues>({
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm({
     resolver: zodResolver(packageFormSchema),
-    defaultValues: {
-      ma_goi: '',
-      ten: '',
-      gia: 90000,
-      phan_loai_goi: 'Data',
-      data_theo_ngay: '30 GB (1 GB/ngày)',
-      free_noi_mang: '0',
-      free_ngoai_mang: '0',
-      sms: '0',
-      tienich: '0',
-      dieu_kien_dang_ky: 'Dành cho tất cả thuê bao di động Viettel.',
-      chinh_sach_ap_dung: 'Tự động gia hạn.',
-      noi_dung_ngoai: '0',
-      tien_ich_free: '0',
-      uudaitrong: '',
-      chu_ky_ngay: '30',
-      dangky: '',
-      huygiahan: '',
-      huygoicuoc: '',
-      dohot: 'normal',
-      system_type: 'DATA_BASE',
-      benefit_group: 'GENERAL_DATA',
-      is_addon: false,
-      is_long_term: false,
-      requires_base_package: false,
-      allow_parallel_with_str: ''
-    }
+    defaultValues: DEFAULT_FORM_VALUES,
   });
 
-  const openAddModal = () => {
-    setActiveTab('general');
+  const watchAllowParallelWith = watch('allow_parallel_with') || [];
+
+  const handleParallelCheckboxChange = (val: string, checked: boolean) => {
+    if (checked) {
+      setValue('allow_parallel_with', [...watchAllowParallelWith, val]);
+    } else {
+      setValue('allow_parallel_with', watchAllowParallelWith.filter((v: string) => v !== val));
+    }
+  };
+
+  // Modal Handlers
+  const handleCreate = () => {
     setEditingPkg(null);
-    reset({
-      ma_goi: '',
-      ten: '',
-      gia: 90000,
-      phan_loai_goi: 'Data',
-      data_theo_ngay: '30 GB (1 GB/ngày)',
-      free_noi_mang: '0',
-      free_ngoai_mang: '0',
-      sms: '0',
-      tienich: '0',
-      dieu_kien_dang_ky: 'Dành cho tất cả thuê bao di động Viettel.',
-      chinh_sach_ap_dung: 'Tự động gia hạn.',
-      noi_dung_ngoai: '0',
-      tien_ich_free: '0',
-      uudaitrong: '',
-      chu_ky_ngay: '30',
-      dangky: '',
-      huygiahan: '',
-      huygoicuoc: '',
-      dohot: 'normal',
-      system_type: 'DATA_BASE',
-      benefit_group: 'GENERAL_DATA',
-      is_addon: false,
-      is_long_term: false,
-      requires_base_package: false,
-      allow_parallel_with_str: ''
-    });
+    setActiveTab(1);
+    reset(DEFAULT_FORM_VALUES);
     setShowModal(true);
   };
 
-  const openEditModal = (pkg: Package) => {
-    setActiveTab('general');
+  const handleEdit = (pkg: Package) => {
     setEditingPkg(pkg);
+    setActiveTab(1);
     reset({
-      ma_goi: pkg.ma_goi || '',
-      ten: pkg.ten,
-      gia: pkg.gia,
-      phan_loai_goi: (pkg.phan_loai_goi === 'Thoại' ? 'Thoại' : pkg.phan_loai_goi) as any,
-      data_theo_ngay: pkg.data_theo_ngay,
-      free_noi_mang: String(pkg.free_noi_mang ?? '0'),
-      free_ngoai_mang: String(pkg.free_ngoai_mang ?? '0'),
-      sms: String(pkg.sms ?? '0'),
-      tienich: pkg.tienich || '0',
-      dieu_kien_dang_ky: pkg.dieu_kien_dang_ky || pkg.doi_tuong_ap_dung || '',
-      chinh_sach_ap_dung: pkg.chinh_sach_ap_dung || 'Tự động gia hạn.',
-      data_meta: pkg.data_meta || '',
-      noi_dung_ngoai: pkg.noi_dung_ngoai || '0',
-      tien_ich_free: pkg.tien_ich_free || '0',
-      uudaitrong: pkg.uudaitrong,
-      chu_ky_ngay: String(pkg.chu_ky_ngay),
-      dangky: pkg.dangky || '',
-      huygiahan: pkg.huygiahan || '',
-      huygoicuoc: pkg.huygoicuoc || '',
-      dohot: (pkg.dohot === 'Hot' ? 'Hot' : 'normal') as any,
-      system_type: pkg.system_type || 'DATA_BASE',
-      benefit_group: pkg.benefit_group || 'GENERAL_DATA',
-      is_addon: pkg.is_addon || false,
-      is_long_term: pkg.is_long_term || false,
-      requires_base_package: pkg.requires_base_package || false,
-      allow_parallel_with_str: pkg.allow_parallel_with ? pkg.allow_parallel_with.join(', ') : ''
+      ma_goi: pkg.ma_goi ?? '',
+      ten: pkg.ten ?? '',
+      gia: Number(pkg.gia) || 0,
+      chu_ky_ngay: Number(pkg.chu_ky_ngay) || 30,
+      cycle_type: (['DAY', 'MONTH', 'YEAR'].includes(pkg.cycle_type ?? '') ? pkg.cycle_type : 'MONTH') as 'DAY' | 'MONTH' | 'YEAR',
+      dohot: pkg.dohot === 'Hot' ? 'Hot' : 'normal',
+      phan_loai_goi: pkg.phan_loai_goi === 'Combo' ? 'Combo' : 'Data',
+      dangky: pkg.dangky ?? '',
+      huygiahan: pkg.huygiahan ?? '',
+      huygoicuoc: pkg.huygoicuoc ?? '',
+      data_theo_ngay: pkg.data_theo_ngay ?? '0 GB',
+      data_meta: pkg.data_meta ?? '',
+      free_noi_mang: Number(pkg.free_noi_mang) || 0,
+      free_ngoai_mang: Number(pkg.free_ngoai_mang) || 0,
+      sms: Number(pkg.sms) || 0,
+      tien_ich_free: pkg.tien_ich_free ?? '',
+      doi_tuong_ap_dung: pkg.doi_tuong_ap_dung ?? 'pho_thong,tra_sau',
+      uudaitrong: pkg.uudaitrong ?? '',
+      service_group: pkg.service_group === 'COMBO' ? 'COMBO' : 'DATA',
+      system_type: (['DATA_BASE', 'COMBO', 'DATA_UTILITY', 'VOICE_SMS', 'ADDON'].includes(pkg.system_type ?? '') ? pkg.system_type : 'DATA_BASE') as any,
+      benefit_group: (['APP_META', 'DATA_MAIN', 'COMBO', 'APP_TV360', 'APP_YOUTUBE', 'APP_TIKTOK'].includes(pkg.benefit_group ?? '') ? pkg.benefit_group : 'DATA_MAIN') as any,
+      registration_policy: (['ALLOW', 'REJECT', 'REPLACE'].includes(pkg.registration_policy ?? '') ? pkg.registration_policy : 'ALLOW') as 'ALLOW' | 'REJECT' | 'REPLACE',
+      allow_parallel_with: Array.isArray(pkg.allow_parallel_with) ? pkg.allow_parallel_with : [],
+      is_auto_renew: pkg.is_auto_renew ?? true,
+      is_addon: pkg.is_addon ?? false,
+      requires_base_package: pkg.requires_base_package ?? false,
     });
     setShowModal(true);
   };
 
-  const handleFormSubmit = (data: PackageFormValues) => {
-    const formattedData: any = {
-      ...data,
-      allow_parallel_with: data.allow_parallel_with_str
-        ? data.allow_parallel_with_str.split(',').map(s => s.trim()).filter(Boolean)
-        : []
-    };
-    delete formattedData.allow_parallel_with_str;
-
-    const runAsync = async () => {
+  const handleFormSubmit = (data: PackageFormData) => {
+    const run = async () => {
+      const refetch = () => fetchPackages(buildFetchParams());
       if (editingPkg) {
-        const pkgKey = editingPkg.id || editingPkg._id || String(editingPkg.package_id);
-        const success = await updatePackage(pkgKey, formattedData);
-        if (success) {
-          showToast('success', `Đã cập nhật thành công gói cước ${data.ten}!`);
-          fetchPackages({
-            page: currentPage,
-            limit: itemsPerPage,
-            search: searchKeyword,
-            category: filterCategory !== 'all' ? filterCategory : undefined,
-            network: filterNetwork !== 'all' ? filterNetwork : undefined,
-            sort: 'price_asc'
-          });
-        } else {
-          showToast('error', `Lỗi khi cập nhật gói cước ${data.ten}.`);
-        }
+        const pkgKey = editingPkg._id || editingPkg.id || String(editingPkg.package_id ?? '');
+        const ok = await updatePackage(pkgKey, data);
+        if (ok) { showToast('success', `Cập nhật thành công gói ${data.ten}!`); refetch(); }
+        else showToast('error', `Lỗi khi cập nhật gói ${data.ten}.`);
       } else {
-        const success = await addPackage(formattedData);
-        if (success) {
-          showToast('success', `Đã tạo thành công gói cước mới ${data.ten}!`);
-          setCurrentPage(1);
-          fetchPackages({
-            page: 1,
-            limit: itemsPerPage,
-            search: searchKeyword,
-            category: filterCategory !== 'all' ? filterCategory : undefined,
-            network: filterNetwork !== 'all' ? filterNetwork : undefined,
-            sort: 'price_asc'
-          });
-        } else {
-          showToast('error', `Lỗi khi tạo gói cước mới ${data.ten}.`);
-        }
+        const ok = await addPackage(data as any);
+        if (ok) { showToast('success', `Tạo mới thành công gói ${data.ten}!`); setCurrentPage(1); refetch(); }
+        else showToast('error', `Lỗi khi tạo gói cước mới ${data.ten}.`);
       }
       setShowModal(false);
     };
-
-    runAsync();
+    run();
   };
 
-  const handleDeleteClick = (pkg: Package) => {
-    setDeleteConfirmPkg(pkg);
-  };
+  const handleDeleteClick = (pkg: Package) => setDeleteConfirmPkg(pkg);
 
   const confirmDelete = async () => {
-    if (deleteConfirmPkg) {
-      const pkgKey = deleteConfirmPkg.id || deleteConfirmPkg._id || String(deleteConfirmPkg.package_id);
-      const success = await deletePackage(pkgKey);
-      if (success) {
-        showToast('success', `Đã xóa gói cước ${deleteConfirmPkg.ten} ra khỏi danh mục.`);
-        const isLastItemOnPage = packages.length === 1 && currentPage > 1;
-        const nextPage = isLastItemOnPage ? currentPage - 1 : currentPage;
-        setCurrentPage(nextPage);
-        fetchPackages({
-          page: nextPage,
-          limit: itemsPerPage,
-          search: searchKeyword,
-          category: filterCategory !== 'all' ? filterCategory : undefined,
-          network: filterNetwork !== 'all' ? filterNetwork : undefined,
-          sort: 'price_asc'
-        });
-      } else {
-        showToast('error', `Lỗi khi xóa gói cước ${deleteConfirmPkg.ten}.`);
-      }
-      setDeleteConfirmPkg(null);
+    if (!deleteConfirmPkg) return;
+    const pkgKey = deleteConfirmPkg._id || deleteConfirmPkg.id || String(deleteConfirmPkg.package_id ?? '');
+    const ok = await deletePackage(pkgKey);
+    if (ok) {
+      showToast('success', `Đã xóa gói ${deleteConfirmPkg.ten} khỏi hệ thống.`);
+      const nextPage = packages.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
+      setCurrentPage(nextPage);
+      fetchPackages(buildFetchParams(nextPage));
+    } else {
+      showToast('error', `Lỗi khi xóa gói ${deleteConfirmPkg.ten}.`);
     }
+    setDeleteConfirmPkg(null);
   };
 
-  const cleanSearchTerm = searchKeyword.toLowerCase().trim();
-  const displayPackages = cleanSearchTerm
-    ? packages.filter(pkg => pkg.ma_goi?.toLowerCase().includes(cleanSearchTerm) || pkg.ten?.toLowerCase().includes(cleanSearchTerm))
-    : packages;
+  const getDataDisplay = (pkg: Package) => {
+    if (pkg.data_theo_ngay && !['0', '0gb', '0 gb', 'null', 'undefined'].includes(pkg.data_theo_ngay.trim().toLowerCase())) {
+      return pkg.data_theo_ngay;
+    }
+    if (pkg.data_meta && pkg.data_meta !== '0' && pkg.data_meta.trim()) return pkg.data_meta;
+    if ((Number(pkg.free_noi_mang) > 0) || (Number(pkg.free_ngoai_mang) > 0) || pkg.phan_loai_goi === 'Thoại') return 'Theo phút gọi';
+    return 'Không có';
+  };
+
+  // Local client-side search lọc theo Mã gói hoặc Tên gói
+  const displayPackages = packages.filter(pkg => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.trim().toLowerCase();
+    const matchMaGoi = pkg.ma_goi && pkg.ma_goi.toLowerCase().includes(term);
+    const matchTen = pkg.ten && pkg.ten.toLowerCase().includes(term);
+    return matchMaGoi || matchTen;
+  });
+
+  const TABS = [
+    { id: 1, label: '1. Thông Tin Cơ Bản & SMS' },
+    { id: 2, label: '2. Thông Số Data & Ưu Đãi' },
+    { id: 3, label: '3. Cấu Hình Hệ Thống & Quy Tắc' },
+  ] as const;
 
   return (
-    <div className="space-y-6 relative animate-fade-in text-xs font-semibold">
-      {/* Toast Notification */}
-      {toastMsg && (
-        <div className={`fixed top-20 right-6 z-50 px-4 py-3 rounded-lg shadow-lg border-l-4 text-xs font-semibold animate-scale-up bg-white text-slate-800 ${
-          toastMsg.type === 'success' ? 'border-emerald-500' : 'border-red-500'
-        }`}>
-          {toastMsg.text}
+    <div className="space-y-5 relative animate-fade-in text-xs font-semibold">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-20 right-6 z-[60] px-4 py-3 rounded-xl shadow-xl border-l-4 text-xs font-bold animate-scale-up bg-white text-slate-800 ${toast.type === 'success' ? 'border-emerald-500' : 'border-red-500'}`}>
+          {toast.text}
         </div>
       )}
 
-      {/* Header View */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
+      {/* Header Trang Admin - Ngắn gọn, trang trọng */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center">
-            <Wifi className="w-6 h-6 text-primary mr-2" />
-            Danh sách quản lý gói cước
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+            <Wifi className="w-6 h-6 text-primary" />
+            Quản Lý Gói Cước Di Động
           </h1>
-          <p className="text-slate-500 text-xs mt-0.5 font-medium">Thực hiện CRUD gói cước di động Viettel kết nối API thật có tích hợp Conflict Engine.</p>
         </div>
-        <button
-          onClick={openAddModal}
-          className="flex items-center space-x-1 bg-primary hover:bg-primary-hover text-white font-bold px-4 py-2.5 rounded-lg text-xs transition-colors focus:outline-none cursor-pointer self-start sm:self-auto"
-        >
+        <button onClick={handleCreate} className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white font-bold px-4 py-2.5 rounded-lg text-xs transition-colors self-start sm:self-auto cursor-pointer">
           <Plus className="w-4 h-4" />
-          <span>Tạo gói mới</span>
+          Tạo Gói Mới
         </button>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white border border-slate-200 shadow-sm p-4 rounded-xl">
-        {/* Search */}
-        <div className="md:col-span-2 relative">
+      {/* THANH CÔNG CỤ TÌM KIẾM ADMIN CỤC BỘ TỐI GIẢN */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-5">
+        <div className="relative w-full">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Tìm theo Mã gói / Tên gói..."
-            value={searchVal}
-            onChange={(e) => setSearchVal(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2.5 px-3 text-slate-700 focus:outline-none transition-colors"
+            placeholder="Tìm theo Mã gói cước hoặc Tên gói cước..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-10 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-primary/60 focus:bg-white transition-all text-slate-700 font-semibold"
           />
-          {searchVal && (
+          {searchTerm && (
             <button
-              onClick={() => setSearchVal('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              type="button"
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
+              title="Xóa từ khóa"
             >
               <X className="w-4 h-4" />
             </button>
           )}
         </div>
-
-        {/* Category Select */}
-        <div>
-          <select
-            value={filterCategory}
-            onChange={(e) => {
-              setFilterCategory(e.target.value as any);
-              setCurrentPage(1);
-            }}
-            className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2.5 px-3 text-slate-700 focus:outline-none transition-colors cursor-pointer"
-          >
-            <option value="all">Tất cả Thể loại</option>
-            <option value="Data">Chỉ DATA</option>
-            <option value="Combo">Combo Thoại + Data</option>
-            <option value="Social">Mạng xã hội</option>
-            <option value="Thoại">Chỉ thoại</option>
-          </select>
-        </div>
-
-        {/* Network Select */}
-        <div>
-          <select
-            value={filterNetwork}
-            onChange={(e) => {
-              setFilterNetwork(e.target.value as any);
-              setCurrentPage(1);
-            }}
-            className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2.5 px-3 text-slate-700 focus:outline-none transition-colors cursor-pointer"
-          >
-            <option value="all">Tất cả Mạng</option>
-            <option value="4G">Công nghệ 4G</option>
-            <option value="5G">Công nghệ 5G</option>
-          </select>
-        </div>
       </div>
 
-      {/* Database Catalog Table */}
-      <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden relative min-h-[220px]">
+      {/* Data Table */}
+      <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-55 border-b border-slate-200 text-slate-600 font-bold">
-                <th className="p-4">Mã / Tên gói</th>
-                <th className="p-4">Thể loại</th>
-                <th className="p-4">Giá cước</th>
-                <th className="p-4">Chu kỳ</th>
-                <th className="p-4">Data ưu đãi</th>
-                <th className="p-4 text-center">Hành động</th>
+              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold text-[10px] uppercase tracking-wider">
+                <th className="px-4 py-3">{FIELD_LABELS.ma_goi}</th>
+                <th className="px-4 py-3">{FIELD_LABELS.ten}</th>
+                <th className="px-4 py-3">{FIELD_LABELS.gia}</th>
+                <th className="px-4 py-3">{FIELD_LABELS.chu_ky_ngay}</th>
+                <th className="px-4 py-3">{FIELD_LABELS.phan_loai_goi}</th>
+                <th className="px-4 py-3">{FIELD_LABELS.data_theo_ngay}</th>
+                <th className="px-4 py-3">{FIELD_LABELS.benefit_group}</th>
+                <th className="px-4 py-3">Trạng Thái</th>
+                <th className="px-4 py-3 text-center">Thao Tác</th>
               </tr>
             </thead>
             {loading ? (
               <LoadingSkeleton />
             ) : (
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {displayPackages.map((pkg) => (
-                  <tr key={pkg.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="p-4 font-bold text-slate-900">
-                      <div className="flex items-center space-x-1.5">
-                        <span className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-mono text-slate-700 uppercase font-black">
-                          {pkg.ma_goi || (pkg.id ? pkg.id.toUpperCase() : String(pkg.package_id || pkg._id || ''))}
-                        </span>
-                        <span>{pkg.ten}</span>
-                        {pkg.dohot !== 'normal' && (
-                          <span className="text-primary" title="Phổ biến">
-                            <Sparkles className="w-3.5 h-3.5 fill-primary" />
+                {displayPackages.map(pkg => (
+                  <tr key={pkg._id || pkg.id} className="hover:bg-slate-50/60 transition-colors">
+                    {/* Mã Gói */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <code className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-mono text-slate-700 font-black uppercase">
+                          {pkg.ma_goi}
+                        </code>
+                        {pkg.dohot === 'Hot' && (
+                          <span title="Gói Nổi Bật">
+                            <Sparkles className="w-3 h-3 text-primary fill-primary" />
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="p-4 uppercase font-bold text-[10px]">
-                      {pkg.phan_loai_goi === 'Data' ? (
-                        <span className="text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded">DATA</span>
-                      ) : pkg.phan_loai_goi === 'Combo' ? (
-                        <span className="text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded">COMBO</span>
-                      ) : pkg.phan_loai_goi === 'Thoại' ? (
-                        <span className="text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded">THOẠI</span>
+                    {/* Tên Gói */}
+                    <td className="px-4 py-3 font-bold text-slate-900 max-w-[160px]">
+                      <span className="line-clamp-2 leading-snug">{pkg.ten}</span>
+                    </td>
+                    {/* Giá Cước */}
+                    <td className="px-4 py-3 font-black text-slate-900 whitespace-nowrap">
+                      {new Intl.NumberFormat('vi-VN').format(Number(pkg.gia))}đ
+                    </td>
+                    {/* Chu Kỳ */}
+                    <td className="px-4 py-3 text-slate-500 font-semibold whitespace-nowrap">
+                      {pkg.chu_ky_ngay || 30} ngày
+                    </td>
+                    {/* Phân Loại */}
+                    <td className="px-4 py-3">
+                      {pkg.phan_loai_goi === 'Combo' ? (
+                        <span className="text-red-700 bg-red-50 border border-red-100 px-2 py-0.5 rounded text-[10px] font-black uppercase">COMBO</span>
                       ) : (
-                        <span className="text-purple-600 bg-purple-50 border border-purple-100 px-2 py-0.5 rounded">SOCIAL</span>
+                        <span className="text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded text-[10px] font-black uppercase">DATA</span>
                       )}
                     </td>
-                    <td className="p-4 font-black text-slate-900">
-                      {new Intl.NumberFormat('vi-VN').format(pkg.gia)}đ
+                    {/* Data Ưu Đãi */}
+                    <td className="px-4 py-3 text-slate-700 font-semibold">{getDataDisplay(pkg)}</td>
+                    {/* Nhóm Ưu Đãi */}
+                    <td className="px-4 py-3 text-slate-500 font-semibold text-[10px] uppercase">{pkg.benefit_group || '—'}</td>
+                    {/* Trạng Thái */}
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-1">
+                        {pkg.is_auto_renew && (
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded whitespace-nowrap">Tự Gia Hạn</span>
+                        )}
+                        {pkg.is_addon && (
+                          <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded whitespace-nowrap">Add-on</span>
+                        )}
+                      </div>
                     </td>
-                    <td className="p-4 text-slate-500 font-semibold">{pkg.chu_ky_ngay} ngày</td>
-                    <td className="p-4 text-slate-800 font-semibold">{pkg.data_theo_ngay}</td>
-                    <td className="p-4 flex items-center justify-center space-x-2">
-                      <button
-                        onClick={() => openEditModal(pkg)}
-                        className="p-2 hover:bg-slate-50 rounded-lg text-blue-600 hover:text-blue-800 transition-colors focus:outline-none cursor-pointer"
-                        title="Sửa"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteClick(pkg)}
-                        className="p-2 hover:bg-red-50 rounded-lg text-primary hover:text-red-800 transition-colors focus:outline-none cursor-pointer"
-                        title="Xóa"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    {/* Thao Tác */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => handleEdit(pkg)} title="Chỉnh sửa gói cước" className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600 hover:text-blue-800 transition-colors">
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => handleDeleteClick(pkg)} title="Xóa gói cước" className="p-1.5 hover:bg-red-50 rounded-lg text-primary hover:text-red-800 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {displayPackages.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-400 font-semibold">
+                    <td colSpan={9} className="px-4 py-10 text-center text-slate-400 font-semibold">
+                      <SlidersHorizontal className="w-8 h-8 mx-auto mb-2 opacity-30" />
                       Không tìm thấy gói cước nào phù hợp.
                     </td>
                   </tr>
@@ -450,482 +470,261 @@ export default function AdminPackages() {
         </div>
       </div>
 
-      {/* Pagination Footer */}
-      {!loading && packages.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-slate-100 text-[10px] text-slate-400 font-extrabold space-y-3 sm:space-y-0">
-          <div>
-            HIỂN THỊ TRANG <span className="text-slate-800">{currentPage}</span> / <span className="text-slate-800">{totalPages}</span> (TỔNG <span className="text-slate-800">{totalItems}</span> GÓI CƯỚC)
-          </div>
-
-          <div className="flex items-center space-x-1">
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-700 font-extrabold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Trang trước
+      {/* Pagination */}
+      {!loading && totalPages > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between pt-3 border-t border-slate-100 text-[10px] text-slate-400 font-extrabold gap-3">
+          <span>TRANG <span className="text-slate-800">{currentPage}</span> / <span className="text-slate-800">{totalPages}</span> — TỔNG <span className="text-slate-800">{totalItems}</span> GÓI CƯỚC</span>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+              <ChevronLeft className="w-3.5 h-3.5" />
             </button>
-
             {Array.from({ length: totalPages }, (_, i) => i + 1)
               .filter(p => Math.abs(p - currentPage) <= 1 || p === 1 || p === totalPages)
-              .map((p, idx, arr) => {
-                const showEllipsis = idx > 0 && p - arr[idx - 1] > 1;
-                return (
-                  <div key={p} className="flex items-center">
-                    {showEllipsis && <span className="px-1.5 text-slate-400 font-bold">...</span>}
-                    <button
-                      onClick={() => setCurrentPage(p)}
-                      className={`w-7 h-7 rounded-lg font-extrabold transition-all ${currentPage === p ? 'bg-primary text-white shadow-sm' : 'border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-700'}`}
-                    >
-                      {p}
-                    </button>
-                  </div>
-                );
-              })}
-
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-700 font-extrabold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Trang sau
+              .map((p, idx, arr) => (
+                <div key={p} className="flex items-center gap-1">
+                  {idx > 0 && p - arr[idx - 1] > 1 && <span className="text-slate-400">…</span>}
+                  <button onClick={() => setCurrentPage(p)} className={`w-7 h-7 rounded-lg font-extrabold transition-all ${currentPage === p ? 'bg-primary text-white shadow-sm' : 'border border-slate-200 bg-white hover:bg-slate-50'}`}>{p}</button>
+                </div>
+              ))}
+            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+              <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
       )}
 
-      {/* CRUD Form overlay Modal */}
+      {/* CRUD Modal (Sạch sẽ, Tinh gọn chuẩn goi_cuoc Mongo Schema) */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-xl max-w-3xl w-full shadow-lg overflow-hidden my-auto max-h-[90vh] flex flex-col animate-scale-up">
-            
-            {/* Modal Header */}
-            <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-3xl w-full shadow-2xl flex flex-col max-h-[92vh] animate-scale-up">
+            {/* Header */}
+            <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex justify-between items-center shrink-0">
               <h3 className="text-sm font-extrabold text-slate-900">
-                {editingPkg ? `Sửa gói cước ${editingPkg.ten}` : 'Tạo gói cước di động mới'}
+                {editingPkg ? `Chỉnh Sửa: ${editingPkg.ten}` : 'Tạo Gói Cước Di Động Mới'}
               </h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-500 hover:text-slate-800 transition-colors focus:outline-none"
-              >
+              <button onClick={() => setShowModal(false)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Modal Form wrapper */}
+            {/* Tab Navigation */}
+            <div className="px-6 pt-3 border-b border-slate-100 shrink-0 flex gap-0 overflow-x-auto">
+              {TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex-none pb-3 px-4 text-[10px] font-extrabold uppercase tracking-wide border-b-2 whitespace-nowrap transition-colors ${activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-700'}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Form Body */}
             <form onSubmit={handleSubmit(handleFormSubmit)} className="flex-1 flex flex-col min-h-0">
-              {/* Modal Body (Scrollable container) */}
-              <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)] custom-scrollbar space-y-6 text-xs">
-                
-                {/* Tabs Navigation Header */}
-                <div className="flex border-b border-slate-150 text-[10px] font-extrabold uppercase tracking-wider shrink-0 pb-1">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('general')}
-                    className={`flex-1 pb-2.5 text-center transition-colors border-b-2 ${activeTab === 'general' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-700'}`}
-                  >
-                    1. Thông tin & Ưu đãi
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('system')}
-                    className={`flex-1 pb-2.5 text-center transition-colors border-b-2 ${activeTab === 'system' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-700'}`}
-                  >
-                    2. Hệ thống & Quy tắc
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('policy')}
-                    className={`flex-1 pb-2.5 text-center transition-colors border-b-2 ${activeTab === 'policy' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-700'}`}
-                  >
-                    3. Mô tả & Cú pháp
-                  </button>
-                </div>
+              <div className="p-6 overflow-y-auto space-y-4 custom-scrollbar">
 
-                {/* Tab Content Panel */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* TAB 1: General & Benefits */}
-                  {activeTab === 'general' && (
-                    <>
-                      {/* Ma goi */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Mã gói cước (Duy nhất)</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: SD135, MXH100..."
-                          disabled={!!editingPkg}
-                          {...register('ma_goi')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors disabled:opacity-60"
-                        />
-                        {errors.ma_goi && <p className="text-[10px] text-red-500 mt-0.5">{errors.ma_goi.message}</p>}
+                {/* ─── TAB 1: Thông Tin Cơ Bản & SMS ─── */}
+                {activeTab === 1 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FieldWrapper label={FIELD_LABELS.ma_goi} error={errors.ma_goi?.message}>
+                      <input type="text" disabled={!!editingPkg} placeholder="VD: 12FB30, SD135..." {...register('ma_goi')} className={inputClass + (editingPkg ? ' opacity-60' : '')} />
+                    </FieldWrapper>
+                    <FieldWrapper label={FIELD_LABELS.ten} error={errors.ten?.message}>
+                      <input type="text" placeholder="VD: 12FB30 360 ngày..." {...register('ten')} className={inputClass} />
+                    </FieldWrapper>
+                    <FieldWrapper label={FIELD_LABELS.gia} error={errors.gia?.message}>
+                      <input type="number" min="0" placeholder="VD: 360000, 135000..." {...register('gia', { valueAsNumber: true })} className={inputClass} />
+                    </FieldWrapper>
+                    <FieldWrapper label={FIELD_LABELS.chu_ky_ngay} error={errors.chu_ky_ngay?.message}>
+                      <input type="number" min="1" placeholder="VD: 360, 30, 7..." {...register('chu_ky_ngay', { valueAsNumber: true })} className={inputClass} />
+                    </FieldWrapper>
+                    <FieldWrapper label={FIELD_LABELS.cycle_type}>
+                      <select {...register('cycle_type')} className={selectClass}>
+                        {Object.entries(CYCLE_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </FieldWrapper>
+                    <FieldWrapper label={FIELD_LABELS.dohot}>
+                      <select {...register('dohot')} className={selectClass}>
+                        <option value="Hot">Gói Nổi Bật (Hot)</option>
+                        <option value="normal">Gói Thường (normal)</option>
+                      </select>
+                    </FieldWrapper>
+                    <FieldWrapper label={FIELD_LABELS.phan_loai_goi}>
+                      <select {...register('phan_loai_goi')} className={selectClass}>
+                        <option value="Data">Data (Dành cho gói Data/Meta)</option>
+                        <option value="Combo">Combo (Dành cho gói Combo thoại + data)</option>
+                      </select>
+                    </FieldWrapper>
+                    <div className="md:col-span-2 border-t border-slate-100 pt-4">
+                      <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-3">Cú Pháp SMS Đăng Ký / Hủy</p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <FieldWrapper label={FIELD_LABELS.dangky}>
+                          <input type="text" placeholder="VD: 12FB30 gửi 191" {...register('dangky')} className={inputClass} />
+                        </FieldWrapper>
+                        <FieldWrapper label={FIELD_LABELS.huygiahan}>
+                          <input type="text" placeholder="VD: HUY 12FB30 gửi 191" {...register('huygiahan')} className={inputClass} />
+                        </FieldWrapper>
+                        <FieldWrapper label={FIELD_LABELS.huygoicuoc}>
+                          <input type="text" placeholder="VD: HUYDATA gửi 191" {...register('huygoicuoc')} className={inputClass} />
+                        </FieldWrapper>
                       </div>
+                    </div>
+                  </div>
+                )}
 
-                      {/* Ten */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Tên hiển thị gói</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: Siêu Tốc SD135..."
-                          {...register('ten')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                        {errors.ten && <p className="text-[10px] text-red-500 mt-0.5">{errors.ten.message}</p>}
-                      </div>
+                {/* ─── TAB 2: Thông Số Data & Ưu Đãi ─── */}
+                {activeTab === 2 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FieldWrapper label={FIELD_LABELS.data_theo_ngay}>
+                      <input type="text" placeholder="VD: 0 GB, 1 GB/ngày..." {...register('data_theo_ngay')} className={inputClass} />
+                    </FieldWrapper>
+                    <FieldWrapper label={FIELD_LABELS.data_meta}>
+                      <input type="text" placeholder="VD: 50GB/30 ngày, Miễn phí FB..." {...register('data_meta')} className={inputClass} />
+                    </FieldWrapper>
+                    <FieldWrapper label={FIELD_LABELS.free_noi_mang}>
+                      <input type="number" min="0" placeholder="VD: 0, 1000 (phút)" {...register('free_noi_mang', { valueAsNumber: true })} className={inputClass} />
+                    </FieldWrapper>
+                    <FieldWrapper label={FIELD_LABELS.free_ngoai_mang}>
+                      <input type="number" min="0" placeholder="VD: 0, 50 (phút)" {...register('free_ngoai_mang', { valueAsNumber: true })} className={inputClass} />
+                    </FieldWrapper>
+                    <FieldWrapper label={FIELD_LABELS.sms}>
+                      <input type="number" min="0" placeholder="VD: 0, 100 (tin nhắn)" {...register('sms', { valueAsNumber: true })} className={inputClass} />
+                    </FieldWrapper>
+                    <FieldWrapper label={FIELD_LABELS.tien_ich_free}>
+                      <input type="text" placeholder="VD: Facebook, TikTok, TV360..." {...register('tien_ich_free')} className={inputClass} />
+                    </FieldWrapper>
+                    <FieldWrapper label={FIELD_LABELS.doi_tuong_ap_dung}>
+                      <input type="text" placeholder="VD: pho_thong,tra_sau..." {...register('doi_tuong_ap_dung')} className={inputClass} />
+                    </FieldWrapper>
+                    <div className="md:col-span-2">
+                      <FieldWrapper label={FIELD_LABELS.uudaitrong} error={errors.uudaitrong?.message}>
+                        <textarea rows={3} placeholder="Miễn phí truy cập Facebook và nhắn tin Messenger..." {...register('uudaitrong')} className={inputClass + ' resize-none'} />
+                      </FieldWrapper>
+                    </div>
+                  </div>
+                )}
 
-                      {/* Gia */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Giá cước (VND)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          placeholder="Ví dụ: 90000, 135000..."
-                          onKeyDown={(e) => {
-                            if (e.key === '-' || e.key === 'e' || e.key === 'E') {
-                              e.preventDefault();
-                            }
-                          }}
-                          {...register('gia', {
-                            valueAsNumber: true,
-                            onChange: (e) => {
-                              const val = e.target.value;
-                              if (val === '') return;
-                              const num = Number(val);
-                              if (num < 0) {
-                                e.target.value = '0';
-                              }
-                            }
-                          })}
-                          className={`w-full bg-slate-50 border rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors ${
-                            errors.gia ? 'border-red-500 focus:border-red-500 shadow-sm' : 'border-slate-200 focus:border-primary/50 focus:bg-white'
-                          }`}
-                        />
-                        {errors.gia && <p className="text-[10px] text-red-500 mt-0.5">{errors.gia.message}</p>}
-                      </div>
+                {/* ─── TAB 3: Cấu Hình Hệ Thống & Quy Tắc (Tái Thiết Kế Trực Quan) ─── */}
+                {activeTab === 3 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FieldWrapper label={FIELD_LABELS.service_group}>
+                      <select {...register('service_group')} className={selectClass}>
+                        <option value="DATA">DATA – Gói Dịch Vụ Data</option>
+                        <option value="COMBO">COMBO – Gói Dịch Vụ Combo</option>
+                      </select>
+                    </FieldWrapper>
 
-                      {/* Phan loai goi */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Thể loại gói</label>
-                        <select
-                          {...register('phan_loai_goi')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors cursor-pointer"
-                        >
-                          <option value="Data">Chỉ DATA</option>
-                          <option value="Combo">Combo Thoại + Data</option>
-                          <option value="Social">Mạng xã hội</option>
-                          <option value="Thoại">Chỉ thoại</option>
-                        </select>
-                      </div>
+                    {/* system_type kèm mô tả chi tiết */}
+                    <FieldWrapper label={FIELD_LABELS.system_type} error={errors.system_type?.message}>
+                      <select {...register('system_type')} className={selectClass}>
+                        {Object.entries(SYSTEM_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </FieldWrapper>
 
-                      {/* Chu ky ngay */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Thời hạn (Ngày thực tế)</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: 30, 7, 1..."
-                          {...register('chu_ky_ngay')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                        {errors.chu_ky_ngay && <p className="text-[10px] text-red-500 mt-0.5">{errors.chu_ky_ngay.message}</p>}
-                      </div>
+                    <FieldWrapper label={FIELD_LABELS.benefit_group} error={errors.benefit_group?.message}>
+                      <select {...register('benefit_group')} className={selectClass}>
+                        <option value="APP_META">APP_META – Facebook & Messenger</option>
+                        <option value="DATA_MAIN">DATA_MAIN – Ưu Đãi Data Chính</option>
+                        <option value="COMBO">COMBO – Combo Thoại & Data</option>
+                        <option value="APP_TV360">APP_TV360 – TV360</option>
+                        <option value="APP_YOUTUBE">APP_YOUTUBE – YouTube</option>
+                        <option value="APP_TIKTOK">APP_TIKTOK – TikTok</option>
+                      </select>
+                    </FieldWrapper>
 
-                      {/* Data theo ngay */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Mô tả dung lượng Data</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: 150 GB (5 GB/ngày), 30 GB..."
-                          {...register('data_theo_ngay')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                        {errors.data_theo_ngay && <p className="text-[10px] text-red-500 mt-0.5">{errors.data_theo_ngay.message}</p>}
-                      </div>
+                    {/* registration_policy kèm hướng dẫn nghiệp vụ */}
+                    <FieldWrapper label={FIELD_LABELS.registration_policy}>
+                      <select {...register('registration_policy')} className={selectClass}>
+                        {Object.entries(REG_POLICY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </FieldWrapper>
 
-                      {/* Free noi mang */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Gọi nội mạng miễn phí</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: 1000 phút nội mạng, hoặc 0"
-                          {...register('free_noi_mang')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                      </div>
-
-                      {/* Free ngoai mang */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Gọi ngoại mạng miễn phí</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: 50 phút ngoại mạng, hoặc 0"
-                          {...register('free_ngoai_mang')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                      </div>
-
-                      {/* SMS */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Tin nhắn SMS miễn phí</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: 100 sms nội mạng, hoặc 0"
-                          {...register('sms')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                      </div>
-
-                      {/* Tienich */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Tiện ích cơ bản</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: Lifebox 100GB, hoặc 0"
-                          {...register('tienich')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                      </div>
-
-                      {/* Free data apps */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Free Data Apps (TikTok, YouTube...)</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: TikTok, YouTube, Facebook, hoặc 0"
-                          {...register('noi_dung_ngoai')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                      </div>
-
-                      {/* Chi tiet tien ich free */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Tiện ích giải trí free (TV360...)</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: TV360 Standard, hoặc 0"
-                          {...register('tien_ich_free')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                      </div>
-
-                      {/* Dohot */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Độ nổi bật</label>
-                        <select
-                          {...register('dohot')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors cursor-pointer"
-                        >
-                          <option value="normal">Bình thường (Normal)</option>
-                          <option value="Hot">Gói nổi bật (Hot)</option>
-                        </select>
-                      </div>
-                    </>
-                  )}
-
-                  {/* TAB 2: System Rules & Conflict */}
-                  {activeTab === 'system' && (
-                    <>
-                      {/* System Type */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Loại hệ thống (System Type)</label>
-                        <select
-                          {...register('system_type')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors cursor-pointer"
-                        >
-                          <option value="DATA_BASE">Gói DATA nền chính (DATA_BASE)</option>
-                          <option value="DATA_UTILITY">Gói DATA tiện ích bổ sung (DATA_UTILITY)</option>
-                          <option value="COMBO">Gói COMBO Thoại + Data (COMBO)</option>
-                          <option value="VOICE_SMS">Gói chuyên THOẠI/SMS (VOICE_SMS)</option>
-                          <option value="ADDON">Gói nạp thêm lưu lượng (ADDON)</option>
-                        </select>
-                        {errors.system_type && <p className="text-[10px] text-red-500 mt-0.5">{errors.system_type.message}</p>}
-                      </div>
-
-                      {/* Benefit Group */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Nhóm ưu đãi (Benefit Group)</label>
-                        <select
-                          {...register('benefit_group')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors cursor-pointer"
-                        >
-                          <option value="GENERAL_DATA">Ưu đãi DATA thông thường (GENERAL_DATA)</option>
-                          <option value="FACEBOOK">Ưu đãi truy cập Facebook (FACEBOOK)</option>
-                          <option value="YOUTUBE">Ưu đãi truy cập Youtube (YOUTUBE)</option>
-                          <option value="TIKTOK">Ưu đãi truy cập TikTok (TIKTOK)</option>
-                          <option value="SPORT">Xem thể thao giải trí (SPORT)</option>
-                          <option value="MOVIE">Xem phim ảnh (MOVIE)</option>
-                          <option value="VOICE_SMS">Liên lạc thoại & SMS (VOICE_SMS)</option>
-                          <option value="COMBO">Hệ thống COMBO đa chức năng (COMBO)</option>
-                          <option value="ADDON_DATA">Lưu lượng mua thêm (ADDON_DATA)</option>
-                        </select>
-                        {errors.benefit_group && <p className="text-[10px] text-red-500 mt-0.5">{errors.benefit_group.message}</p>}
-                      </div>
-
-                      {/* Allow parallel with */}
-                      <div className="flex flex-col space-y-1.5 md:col-span-2">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Được chạy song song (Phân tách dấu phẩy)</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: DATA_UTILITY, ADDON..."
-                          {...register('allow_parallel_with_str')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                      </div>
-
-                      {/* Checkbox rules card */}
-                      <div className="md:col-span-2 bg-slate-50 border border-slate-200/60 p-4 rounded-xl space-y-3 mt-2">
-                        <span className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider block mb-1">Cấu hình quy tắc xung đột hệ thống</span>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <label className="flex items-center space-x-2 text-slate-700 font-extrabold cursor-pointer">
+                    {/* Multi-Select Checkboxes cho allow_parallel_with */}
+                    <div className="md:col-span-2 space-y-1.5">
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">{FIELD_LABELS.allow_parallel_with}</label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                        {PARALLEL_OPTIONS.map(item => (
+                          <label key={item.value} className="flex items-center gap-2 cursor-pointer text-slate-700 font-bold bg-white border border-slate-200 rounded-lg p-2.5 hover:bg-slate-100/80 transition-colors text-xs">
                             <input
                               type="checkbox"
-                              {...register('is_addon')}
-                              className="rounded text-primary focus:ring-primary w-4 h-4"
+                              value={item.value}
+                              checked={watchAllowParallelWith.includes(item.value)}
+                              onChange={(e) => handleParallelCheckboxChange(item.value, e.target.checked)}
+                              className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer shrink-0"
                             />
-                            <span>Là gói tiện ích (Add-on)</span>
+                            <span>{item.label}</span>
                           </label>
+                        ))}
+                      </div>
+                    </div>
 
-                          <label className="flex items-center space-x-2 text-slate-700 font-extrabold cursor-pointer">
-                            <input
-                              type="checkbox"
-                              {...register('is_long_term')}
-                              className="rounded text-primary focus:ring-primary w-4 h-4"
-                            />
-                            <span>Là gói dài hạn (Long-term)</span>
+                    {/* Checkbox rules */}
+                    <div className="md:col-span-2 bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                      <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Cấu Hình Quy Tắc Hệ Thống</p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {[
+                          { name: 'is_auto_renew' as const, label: FIELD_LABELS.is_auto_renew },
+                          { name: 'is_addon' as const, label: FIELD_LABELS.is_addon },
+                          { name: 'requires_base_package' as const, label: FIELD_LABELS.requires_base_package },
+                        ].map(({ name, label }) => (
+                          <label key={name} className="flex items-center gap-2 cursor-pointer text-slate-700 font-bold">
+                            <input type="checkbox" {...register(name)} className="w-4 h-4 rounded text-primary focus:ring-primary" />
+                            <span>{label}</span>
                           </label>
-
-                          <label className="flex items-center space-x-2 text-slate-700 font-extrabold cursor-pointer">
-                            <input
-                              type="checkbox"
-                              {...register('requires_base_package')}
-                              className="rounded text-primary focus:ring-primary w-4 h-4"
-                            />
-                            <span>Yêu cầu gói nền chính</span>
-                          </label>
-                        </div>
+                        ))}
                       </div>
-                    </>
-                  )}
-
-                  {/* TAB 3: Policy & SMS Syntax */}
-                  {activeTab === 'policy' && (
-                    <>
-                      {/* Dieu kien dang ky */}
-                      <div className="flex flex-col space-y-1.5 md:col-span-2">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Đối tượng áp dụng (Điều kiện đăng ký)</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: SIM trả trước kích hoạt mới..."
-                          {...register('dieu_kien_dang_ky')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                        {errors.dieu_kien_dang_ky && <p className="text-[10px] text-red-500 mt-0.5">{errors.dieu_kien_dang_ky.message}</p>}
-                      </div>
-
-                      {/* Chinh sach ap dung */}
-                      <div className="flex flex-col space-y-1.5 md:col-span-2">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Chính sách gia hạn & Sử dụng</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: Tự động gia hạn khi có đủ tiền..."
-                          {...register('chinh_sach_ap_dung')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                        {errors.chinh_sach_ap_dung && <p className="text-[10px] text-red-500 mt-0.5">{errors.chinh_sach_ap_dung.message}</p>}
-                      </div>
-
-                      {/* Uudaitrong */}
-                      <div className="flex flex-col space-y-1.5 md:col-span-2">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Mô tả tóm tắt ưu đãi hiển thị</label>
-                        <textarea
-                          placeholder="Nhập mô tả tóm tắt..."
-                          rows={2}
-                          {...register('uudaitrong')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none resize-none transition-colors"
-                        />
-                        {errors.uudaitrong && <p className="text-[10px] text-red-500 mt-0.5">{errors.uudaitrong.message}</p>}
-                      </div>
-
-                      {/* Dangky */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Cú pháp đăng ký SMS</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: Soạn SD135 gửi 191"
-                          {...register('dangky')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                      </div>
-
-                      {/* Huygiahan */}
-                      <div className="flex flex-col space-y-1.5">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Cú pháp hủy gia hạn SMS</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: Soạn HUY gửi 191"
-                          {...register('huygiahan')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                      </div>
-
-                      {/* Huygoicuoc */}
-                      <div className="flex flex-col space-y-1.5 md:col-span-2">
-                        <label className="font-bold text-slate-500 uppercase tracking-wider">Cú pháp hủy hoàn toàn gói cước SMS</label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: Soạn HUYDATA gửi 191"
-                          {...register('huygoicuoc')}
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-lg py-2 px-3 text-slate-700 focus:outline-none transition-colors"
-                        />
-                      </div>
-                    </>
-                  )}
-                </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Modal Footer */}
-              <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex justify-end space-x-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2.5 bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors font-bold focus:outline-none text-[11px]"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2.5 bg-primary hover:bg-primary-hover text-white font-bold rounded-lg transition-colors focus:outline-none cursor-pointer text-[11px]"
-                >
-                  {editingPkg ? 'Lưu cập nhật' : 'Tạo mới gói'}
-                </button>
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
+                <div className="flex gap-2">
+                  {activeTab > 1 && (
+                    <button type="button" onClick={() => setActiveTab(t => (t - 1) as 1 | 2 | 3)} className="px-3 py-2 text-[11px] font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                      ← Tab Trước
+                    </button>
+                  )}
+                  {activeTab < 3 && (
+                    <button type="button" onClick={() => setActiveTab(t => (t + 1) as 1 | 2 | 3)} className="px-3 py-2 text-[11px] font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                      Tab Sau →
+                    </button>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-[11px] font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    Hủy Bỏ
+                  </button>
+                  <button type="submit" className="px-4 py-2 text-[11px] font-bold bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors">
+                    {editingPkg ? 'Lưu Cập Nhật' : 'Tạo Gói Mới'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirm Modal */}
       {deleteConfirmPkg && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-6 max-w-sm w-full shadow-md animate-scale-up z-50">
-            <h4 className="text-sm font-extrabold text-primary mb-2 flex items-center space-x-2">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 max-w-sm w-full shadow-xl animate-scale-up">
+            <h4 className="text-sm font-extrabold text-primary mb-2 flex items-center gap-2">
               <AlertCircle className="w-5 h-5" />
-              <span>Xóa gói cước</span>
+              Xác Nhận Xóa Gói Cước
             </h4>
-            <p className="text-xs text-slate-650 mb-5 leading-relaxed font-semibold">
-              Bạn có chắc chắn muốn xóa gói cước <strong className="text-primary">{deleteConfirmPkg.ten}</strong> hoàn toàn khỏi hệ thống di động Viettel? Hành động này không thể hoàn tác.
+            <p className="text-xs text-slate-600 mb-5 leading-relaxed font-semibold">
+              Bạn có chắc muốn xóa gói cước <strong className="text-primary">{deleteConfirmPkg.ten}</strong>? Hành động này sẽ xóa đồng thời khỏi cả 2 collection <code className="bg-slate-100 px-1 rounded">goi_cuoc</code> và <code className="bg-slate-100 px-1 rounded">package_features</code>.
             </p>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setDeleteConfirmPkg(null)}
-                className="flex-1 py-2 bg-slate-50 border border-slate-200 text-slate-650 hover:text-slate-900 hover:bg-slate-100 rounded-lg text-xs transition-colors font-bold focus:outline-none"
-              >
-                Hủy bỏ
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirmPkg(null)} className="flex-1 py-2.5 text-xs font-bold bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                Hủy Bỏ
               </button>
-              <button
-                onClick={confirmDelete}
-                className="flex-1 py-2 bg-primary hover:bg-primary-hover text-white font-bold rounded-lg text-xs transition-colors focus:outline-none cursor-pointer"
-              >
-                Xác nhận xóa
+              <button onClick={confirmDelete} className="flex-1 py-2.5 text-xs font-bold bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors">
+                Xác Nhận Xóa
               </button>
             </div>
           </div>

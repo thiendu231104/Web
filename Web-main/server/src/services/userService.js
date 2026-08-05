@@ -19,36 +19,61 @@ const userService = {
       ];
     }
 
-    const totalItems = await Account.countDocuments(mongoQuery);
-    const accounts = await Account.find(mongoQuery)
-      .sort({ user_id: 1 })
-      .skip(skip)
-      .limit(limit);
+    const [totalItems, accounts] = await Promise.all([
+      Account.countDocuments(mongoQuery),
+      Account.find(mongoQuery)
+        .sort({ user_id: 1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+    ]);
 
-    const users = [];
     const now = new Date();
+    const userIds = accounts.map(a => a.user_id);
 
-    for (const acc of accounts) {
-      // Find active subscriptions
-      const activeSubs = await UserSubscription.find({ 
-        userId: acc.user_id, 
-        status: 'ACTIVE',
-        expiresAt: { $gt: now }
+    // Batch fetch active subscriptions for all users in page
+    const activeSubs = userIds.length > 0
+      ? await UserSubscription.find({
+          userId: { $in: userIds },
+          status: 'ACTIVE',
+          expiresAt: { $gt: now }
+        }).lean()
+      : [];
+
+    // Batch fetch matching packages
+    const packageIds = [...new Set(activeSubs.map(s => s.packageId))];
+    const rawPackages = packageIds.length > 0
+      ? await Package.find({
+          $or: [{ package_id: { $in: packageIds } }, { id: { $in: packageIds } }]
+        }).lean()
+      : [];
+
+    const packageMap = new Map();
+    rawPackages.forEach(p => {
+      if (p.package_id !== undefined) packageMap.set(p.package_id, p);
+      if (p.id !== undefined) packageMap.set(p.id, p);
+    });
+
+    const subsByUserId = new Map();
+    activeSubs.forEach(sub => {
+      if (!subsByUserId.has(sub.userId)) {
+        subsByUserId.set(sub.userId, []);
+      }
+      subsByUserId.get(sub.userId).push(sub);
+    });
+
+    const users = accounts.map(acc => {
+      const userSubs = subsByUserId.get(acc.user_id) || [];
+      const activePackages = userSubs.map(sub => {
+        const pkg = packageMap.get(sub.packageId);
+        return {
+          packageId: pkg ? pkg.ma_goi.toLowerCase() : `pkg_${sub.packageId}`,
+          activatedAt: sub.activatedAt,
+          expiresAt: sub.expiresAt
+        };
       });
 
-      const activePackages = [];
-      for (const sub of activeSubs) {
-        const pkg = await Package.findOne({ $or: [{ package_id: sub.packageId }, { id: sub.packageId }] });
-        if (pkg) {
-          activePackages.push({
-            packageId: pkg.ma_goi.toLowerCase(),
-            activatedAt: sub.activatedAt,
-            expiresAt: sub.expiresAt
-          });
-        }
-      }
-
-      users.push({
+      return {
         id: String(acc.user_id),
         name: acc.fullname,
         phoneNumber: acc.phone_number,
@@ -60,8 +85,8 @@ const userService = {
         status: acc.status || 'active',
         created_at: acc.created_at || '',
         activePackages
-      });
-    }
+      };
+    });
 
     return {
       users,

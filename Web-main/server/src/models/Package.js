@@ -17,6 +17,7 @@ const packageSchema = new mongoose.Schema({
   data_meta: { type: String, default: null },
   uudaitrong: { type: String, default: '' },
   chu_ky_ngay: { type: Number, default: 30 },
+  cycle_type: { type: String, enum: ['DAY', 'MONTH', 'YEAR'], default: 'MONTH' },
   dangky: { type: String, default: null },
   huygiahan: { type: String, default: null },
   huygoicuoc: { type: String, default: null },
@@ -34,7 +35,10 @@ const packageSchema = new mongoose.Schema({
 });
 
 packageSchema.index({ ten: 1 });
-packageSchema.index({ phan_loai_goi: 1 });
+packageSchema.index({ phan_loai_goi: 1, gia: 1 });
 packageSchema.index({ system_type: 1 });
+packageSchema.index({ package_id: 1, ma_goi: 1 });
+packageSchema.index({ updatedAt: -1 });
+packageSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('Package', packageSchema);

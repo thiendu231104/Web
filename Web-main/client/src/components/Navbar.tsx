@@ -77,7 +77,7 @@ export default function Navbar() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const keyword = params.get('keyword') || '';
+    const keyword = params.get('search') || params.get('keyword') || '';
     setSearchQuery(keyword);
   }, [location.search]);
 
@@ -85,9 +85,9 @@ export default function Navbar() {
     e.preventDefault();
     const query = searchQuery.trim();
     if (query) {
-      navigate(`/goi-cuoc?keyword=${encodeURIComponent(query)}`);
+      navigate(`/packages?search=${encodeURIComponent(query)}`);
     } else {
-      navigate('/goi-cuoc');
+      navigate('/packages');
     }
     setIsMenuOpen(false);
   };

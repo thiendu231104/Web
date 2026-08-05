@@ -65,6 +65,10 @@ const contactController = {
 
   getAdminContacts: async (req, res, next) => {
     try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+
       const { status, search, source, is_deleted_by_user } = req.query;
       const mongoQuery = {};
 
@@ -97,17 +101,32 @@ const contactController = {
         ];
       }
 
-      const contacts = await Contact.find(mongoQuery).sort({ created_at: -1 });
+      const [totalItems, contacts] = await Promise.all([
+        Contact.countDocuments(mongoQuery),
+        Contact.find(mongoQuery).sort({ created_at: -1 }).skip(skip).limit(limit).lean()
+      ]);
 
-      const normalized = [];
-      for (const contact of contacts) {
-        normalized.push(await normalizeContact(contact));
-      }
+      const normalized = contacts.map(c => {
+        const message = c.message || '';
+        const match = message.match(/^\[Chủ đề:\s*(.*?)\]\s*([\s\S]*)$/i) || message.match(/^\[(.*?)\]\s*([\s\S]*)$/);
+        if (match) {
+          return {
+            ...c,
+            topic: match[1].trim(),
+            message: match[2].trim()
+          };
+        }
+        return c;
+      });
 
       return res.status(200).json({
         success: true,
         message: 'Lấy danh sách liên hệ thành công.',
-        data: normalized
+        data: normalized,
+        page,
+        limit,
+        totalPages: Math.ceil(totalItems / limit),
+        totalItems
       });
     } catch (error) {
       next(error);

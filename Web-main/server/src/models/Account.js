@@ -21,5 +21,6 @@ const accountSchema = new mongoose.Schema({
 accountSchema.index({ status: 1 });
 accountSchema.index({ role: 1 });
 accountSchema.index({ created_at: 1 });
+accountSchema.index({ fullname: 1, phone_number: 1, email: 1 });
 
 module.exports = mongoose.model('Account', accountSchema);
