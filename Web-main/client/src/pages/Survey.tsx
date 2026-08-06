@@ -109,9 +109,19 @@ export default function Survey() {
 
   if (loading && !nextQuestion && !isCompleted) {
     return (
-      <div className="max-w-3xl mx-auto py-24 text-center space-y-4">
-        <RefreshCw className="w-8 h-8 animate-spin text-primary mx-auto" />
-        <p className="text-slate-500 font-bold text-xs">Đang tải luồng Khảo sát Hybrid Adaptive Viettel AI...</p>
+      <div className="max-w-3xl mx-auto py-24 text-center space-y-6">
+        <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center mx-auto text-primary animate-pulse">
+          <Compass className="w-6 h-6 animate-spin" />
+        </div>
+        <div className="space-y-2">
+          <p className="text-slate-900 font-extrabold text-sm">Đang kết nối luồng Khảo sát Viettel AI...</p>
+          <p className="text-slate-400 font-semibold text-xs">Vui lòng chờ trong giây lát</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mx-auto pt-4">
+          <div className="h-28 bg-slate-100/80 animate-pulse rounded-2xl border border-slate-200/50" />
+          <div className="h-28 bg-slate-100/80 animate-pulse rounded-2xl border border-slate-200/50" />
+          <div className="h-28 bg-slate-100/80 animate-pulse rounded-2xl border border-slate-200/50" />
+        </div>
       </div>
     );
   }
@@ -191,45 +201,59 @@ export default function Survey() {
               )}
             </div>
 
-            {/* Step Options Rendering */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={nextQuestion.field}
-                initial={{ opacity: 0, x: 15 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -15 }}
-                transition={{ duration: 0.2, ease: 'easeInOut' }}
-                className="space-y-4 text-left"
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {nextQuestion.options.map((opt: any) => {
-                    const isSelected = answers[nextQuestion.field] === opt.value;
-                    const Icon = getOptionIcon(nextQuestion.field, opt.value);
-                    return (
-                      <div
-                        key={opt.value}
-                        onClick={() => setAnswerAndSubmit(nextQuestion.field, opt.value)}
-                        className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-3 ${isSelected
-                            ? 'bg-red-50/70 border-primary text-slate-900 shadow-md ring-2 ring-primary/20'
-                            : 'bg-slate-50/60 border-slate-200 hover:border-slate-350 hover:bg-slate-50 text-slate-700'
-                          }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isSelected ? 'bg-primary text-white' : 'bg-slate-200 text-slate-600'}`}>
-                            <Icon className="w-4 h-4" />
+            {/* Step Options Rendering OR Skeleton Loading */}
+            {loading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-2">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="p-5 rounded-2xl bg-slate-50 border border-slate-200/60 animate-pulse h-32 flex flex-col justify-between space-y-3">
+                    <div className="w-8 h-8 rounded-xl bg-slate-200" />
+                    <div className="space-y-1.5">
+                      <div className="h-3 bg-slate-200 rounded w-20" />
+                      <div className="h-2 bg-slate-200/80 rounded w-28" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={nextQuestion.field}
+                  initial={{ opacity: 0, x: 15 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -15 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  className="space-y-4 text-left"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {nextQuestion.options.map((opt: any) => {
+                      const isSelected = answers[nextQuestion.field] === opt.value;
+                      const Icon = getOptionIcon(nextQuestion.field, opt.value);
+                      return (
+                        <div
+                          key={opt.value}
+                          onClick={() => setAnswerAndSubmit(nextQuestion.field, opt.value)}
+                          className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-3 ${isSelected
+                              ? 'bg-red-50/70 border-primary text-slate-900 shadow-md ring-2 ring-primary/20'
+                              : 'bg-slate-50/60 border-slate-200 hover:border-slate-350 hover:bg-slate-50 text-slate-700'
+                            }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isSelected ? 'bg-primary text-white' : 'bg-slate-200 text-slate-600'}`}>
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            {isSelected && <Check className="w-4 h-4 text-primary" />}
                           </div>
-                          {isSelected && <Check className="w-4 h-4 text-primary" />}
+                          <div>
+                            <p className="text-xs font-black text-slate-900">{opt.label}</p>
+                            <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">{opt.detail}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs font-black text-slate-900">{opt.label}</p>
-                          <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">{opt.detail}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            </AnimatePresence>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              </AnimatePresence>
+            )}
 
             {/* Back Button Footer */}
             {historyStack.length > 0 && (
@@ -237,7 +261,7 @@ export default function Survey() {
                 <button
                   onClick={goBack}
                   disabled={loading}
-                  className="inline-flex items-center space-x-1.5 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl text-xs text-slate-600 transition-colors font-bold cursor-pointer"
+                  className="inline-flex items-center space-x-1.5 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl text-xs text-slate-600 transition-colors font-bold cursor-pointer disabled:opacity-50"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   <span>Quay lại bước trước</span>
@@ -263,8 +287,14 @@ export default function Survey() {
               </div>
             </div>
 
-            {/* Suggested Packages Cards Grid */}
-            {recommendedPackages.length > 0 ? (
+            {/* Suggested Packages Cards Grid OR Skeleton */}
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-64 bg-slate-100 animate-pulse rounded-2xl border border-slate-200/60" />
+                ))}
+              </div>
+            ) : recommendedPackages.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {recommendedPackages.map((pkg) => (
                   <PackageCard
@@ -316,7 +346,3 @@ export default function Survey() {
     </div>
   );
 }
-
-
-
-

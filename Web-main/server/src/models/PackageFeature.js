@@ -105,4 +105,10 @@ const packageFeatureSchema = new mongoose.Schema({
   timestamps: true
 });
 
+packageFeatureSchema.index({ has_facebook: 1, has_tiktok: 1, has_youtube: 1, has_tv360: 1, price: 1 });
+packageFeatureSchema.index({ has_facebook: 1 });
+packageFeatureSchema.index({ has_tiktok: 1 });
+packageFeatureSchema.index({ has_youtube: 1 });
+packageFeatureSchema.index({ has_tv360: 1 });
+
 module.exports = mongoose.model('PackageFeature', packageFeatureSchema);

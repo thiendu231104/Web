@@ -14,6 +14,7 @@ const surveyRoutes = require('./routes/surveyRoutes');
 const compareRoutes = require('./routes/compareRoutes');
 const contactRoutes = require('./routes/contactRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 
 // Global Error Handler Import
 const globalErrorHandler = require('./middlewares/errorMiddleware');
@@ -90,6 +91,7 @@ app.use('/api/survey', surveyRoutes);
 app.use('/api/compare', compareRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin/analytics', analyticsRoutes);
 
 // Base route
 app.get('/', (req, res) => {
@@ -117,8 +119,9 @@ const startServer = async () => {
     });
     console.log("MongoDB Connected Successfully to database: goicuocviettel");
 
-    // Auto-seed FAQs and Chatbot Configuration on server startup if collections are empty
+    // Auto-seed FAQs, sync PackageFeatures, and Chatbot Configuration on server startup
     chatbotService.checkAndSeedChatbot().catch(err => console.error("Chatbot seed failed:", err));
+    surveyService.syncPackageFeatures().catch(err => console.error("PackageFeatures sync failed:", err));
     surveyService.checkAndSeedSurveyConfigs().catch(err => console.error("Survey config seed failed:", err));
 
     // Start Express API Server ONLY after MongoDB connection is confirmed

@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Wifi, Users, ArrowLeft, LogOut, ShieldCheck, Wallet, PhoneCall, ClipboardList, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Wifi, Users, ArrowLeft, LogOut, ShieldCheck, Wallet, PhoneCall, ClipboardList, MessageSquare, BarChart3 } from 'lucide-react';
 import { useAuthStore } from '../store';
 import { useState, useEffect } from 'react';
 
@@ -36,7 +36,8 @@ export default function AdminLayout() {
     { label: 'Lịch sử Nạp tiền', path: '/admin/deposits', icon: Wallet },
     { label: 'Yêu cầu Liên hệ', path: '/admin/contacts', icon: PhoneCall },
     { label: 'Lịch sử Khảo sát', path: '/admin/surveys', icon: ClipboardList },
-    { label: 'Lịch sử Chatbot', path: '/admin/chatbot', icon: MessageSquare }
+    { label: 'Lịch sử Chatbot', path: '/admin/chatbot', icon: MessageSquare },
+    { label: 'Thống kê & Báo cáo', path: '/admin/analytics', icon: BarChart3 }
   ];
 
   return (

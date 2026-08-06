@@ -620,9 +620,15 @@ export const surveyApi = {
     return response.data.success;
   },
 
-  getAdminSurveys: async (params?: { search?: string }): Promise<any[]> => {
-    const response = await axiosInstance.get<{ success: boolean; data: any[] }>('/api/survey/admin/history', { params });
-    return response.data.data;
+  getAdminSurveys: async (params?: { page?: number; limit?: number; search?: string }): Promise<{
+    data: any[];
+    pagination: { page: number; limit: number; total: number; totalPages: number }
+  }> => {
+    const response = await axiosInstance.get<{ success: boolean; data: any[]; pagination: any }>('/api/survey/admin/history', { params });
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination || { page: 1, limit: 10, total: 0, totalPages: 1 }
+    };
   }
 };
 

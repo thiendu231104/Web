@@ -67,21 +67,26 @@ async function syncPackageFeatures() {
     const hasData = hasRealData(pkg);
     const hasVoice = hasRealVoice(pkg);
     const hasSms = hasRealSms(pkg);
-    const hasYoutube = checkKeyword(pkg, 'youtube');
-    const hasTiktok = checkKeyword(pkg, 'tiktok');
-    const hasFacebook = checkKeyword(pkg, 'facebook');
-    const hasTv360 = checkKeyword(pkg, 'tv360');
-    const hasMovie = checkKeyword(pkg, 'movie|phim|cinema');
+
+    const benefitGroupUpper = (pkg.benefit_group || '').toString().toUpperCase().trim();
+    const maGoiUpper = (pkg.ma_goi || '').toString().toUpperCase().trim();
+
+    const hasFacebook = !!(pkg.tien_ich_free && /facebook/i.test(pkg.tien_ich_free));
+    const hasTiktok   = !!(pkg.tien_ich_free && /tiktok/i.test(pkg.tien_ich_free));
+    const hasYoutube  = !!(pkg.tien_ich_free && /youtube/i.test(pkg.tien_ich_free));
+    const hasTv360    = !!(pkg.tien_ich_free && /tv360/i.test(pkg.tien_ich_free));
+    const hasMovie    = !!(pkg.tien_ich_free && /movie|phim|cinema/i.test(pkg.tien_ich_free));
+
     const hasSocial = hasYoutube || hasTiktok || hasFacebook || hasTv360 || hasMovie || checkKeyword(pkg, 'social') || !!pkg.data_meta;
     const has5g = !!(pkg.loai_mang && pkg.loai_mang.toUpperCase().includes('5G'));
     
-    const isCombo = pkg.benefit_group === 'COMBO' || pkg.phan_loai_goi === 'Combo' || pkg.service_group === 'COMBO' || (hasData && hasVoice);
-    const isDataOnly = pkg.benefit_group === 'DATA_MAIN' || (hasData && !hasVoice);
-    const isSocial = ['YOUTUBE', 'TIKTOK', 'FACEBOOK', 'MOVIE', 'SOCIAL', 'APP_META', 'APP_TIKTOK', 'APP_YOUTUBE', 'APP_TV360'].includes(pkg.benefit_group ? pkg.benefit_group.toUpperCase() : '') || pkg.phan_loai_goi === 'Social' || pkg.phan_loai_goi === 'MXH' || !!pkg.data_meta;
+    const isCombo = benefitGroupUpper === 'COMBO' || pkg.phan_loai_goi === 'Combo' || pkg.service_group === 'COMBO' || (hasData && hasVoice);
+    const isDataOnly = (benefitGroupUpper === 'DATA_MAIN' || (hasData && !hasVoice)) && !isCombo;
+    const isSocial = ['YOUTUBE', 'TIKTOK', 'FACEBOOK', 'MOVIE', 'SOCIAL', 'APP_META', 'APP_TIKTOK', 'APP_YOUTUBE', 'APP_TV360'].includes(benefitGroupUpper) || pkg.phan_loai_goi === 'Social' || pkg.phan_loai_goi === 'MXH' || !!pkg.data_meta;
     const isAddon = pkg.is_addon === true || pkg.requires_base_package === true;
     
     const cycleDays = parseInt(pkg.chu_ky_ngay) || 30;
-    const price = pkg.gia;
+    const price = pkg.gia || 0;
     
     let priceLevel = 'medium';
     if (pkg.phan_khuc_gia === 'Gia_re' || price < 50000) priceLevel = 'cheap';
@@ -133,11 +138,10 @@ async function syncPackageFeatures() {
       hasYoutube ? 'youtube' : '',
       hasTiktok ? 'tiktok' : '',
       hasFacebook ? 'facebook' : '',
+      hasFacebook ? 'meta' : '',
       hasTv360 ? 'tv360' : '',
       hasMovie ? 'movie' : '',
-      pkg.data_meta ? 'meta' : '',
-      pkg.data_meta ? 'facebook' : '',
-      pkg.data_meta ? 'social' : ''
+      hasSocial ? 'social' : ''
     ].filter(Boolean)));
 
     await PackageFeature.findOneAndUpdate(
@@ -347,12 +351,21 @@ function matchPackageCriteria(pkg, feat, field, value) {
     return true;
   }
 
-  if (fieldKey === 'tien_ich_free' || fieldKey === 'primary_app') {
-    const valUpper = String(value).toUpperCase();
-    if (valUpper.includes('TIKTOK')) return pkg.benefit_group === 'APP_TIKTOK' || feat.has_tiktok || checkKeyword(pkg, 'tiktok');
-    if (valUpper.includes('YOUTUBE')) return pkg.benefit_group === 'APP_YOUTUBE' || feat.has_youtube || checkKeyword(pkg, 'youtube');
-    if (valUpper.includes('FACEBOOK') || valUpper.includes('META')) return pkg.benefit_group === 'APP_META' || feat.has_facebook || (pkg.data_meta && pkg.data_meta !== '0') || checkKeyword(pkg, 'facebook');
-    if (valUpper.includes('TV360')) return pkg.benefit_group === 'APP_TV360' || feat.has_tv360 || checkKeyword(pkg, 'tv360');
+  if (fieldKey === 'tien_ich_free' || fieldKey === 'primary_app' || fieldKey === 'app' || fieldKey === 'social_app') {
+    const valUpper = String(value).toUpperCase().trim();
+
+    if (valUpper.includes('TIKTOK')) {
+      return !!(pkg.tien_ich_free && /tiktok/i.test(pkg.tien_ich_free));
+    }
+    if (valUpper.includes('YOUTUBE')) {
+      return !!(pkg.tien_ich_free && /youtube/i.test(pkg.tien_ich_free));
+    }
+    if (valUpper.includes('TV360')) {
+      return !!(pkg.tien_ich_free && /tv360/i.test(pkg.tien_ich_free));
+    }
+    if (valUpper.includes('FACEBOOK') || valUpper.includes('META') || valUpper === 'FB') {
+      return !!(pkg.tien_ich_free && /facebook/i.test(pkg.tien_ich_free));
+    }
     return true;
   }
 
@@ -532,7 +545,7 @@ const surveyService = {
     });
 
     const visibleIds = visiblePackages.map(pkg => pkg.package_id || pkg.id);
-    const featuresList = await PackageFeature.find({ package_id: { $in: visibleIds } });
+    const featuresList = await PackageFeature.find({ package_id: { $in: visibleIds } }).lean();
 
     const allFeaturesMap = {};
     featuresList.forEach(feat => {
@@ -709,11 +722,11 @@ const surveyService = {
         full_name: fullName || (userObj ? userObj.name : ''),
         source,
         answers,
-        filters: { isCompleted: result.isCompleted, remainingCount: result.remainingCount },
+        filters: { isCompleted: true, remainingCount: result.remainingCount },
         recommendedPackages: result.packages || [],
         deleted: false,
         deletedAt: null,
-        isEarlyTerminated: result.remainingCount <= 3
+        isEarlyTerminated: false
       });
     }
 
@@ -747,10 +760,14 @@ const surveyService = {
     return result.modifiedCount > 0;
   },
 
-  getAllSurveys: async ({ search = '' } = {}) => {
+  getAllSurveys: async ({ page = 1, limit = 10, search = '' } = {}) => {
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, parseInt(limit, 10) || 10);
+    const skip = (pageNum - 1) * limitNum;
+
     let mongoQuery = { deleted: { $ne: true } };
 
-    if (search.trim()) {
+    if (search && search.trim()) {
       const searchKeyword = search.trim();
       
       if (/^[0-9+]+$/.test(searchKeyword)) {
@@ -778,11 +795,15 @@ const surveyService = {
       }
     }
 
+    const total = await SurveyHistory.countDocuments(mongoQuery);
+
     const rawHistory = await SurveyHistory.find(mongoQuery)
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
       .lean();
 
-    const result = [];
+    const data = [];
     for (const hist of rawHistory) {
       let phoneNumber = hist.phone || 'Khách vãng lai';
       let fullName = hist.full_name || '';
@@ -797,7 +818,7 @@ const surveyService = {
         }
       }
 
-      result.push({
+      data.push({
         _id: hist._id,
         userId: hist.userId || hist.user_id || null,
         user_id: hist.user_id || hist.userId || null,
@@ -812,9 +833,18 @@ const surveyService = {
       });
     }
 
-    return result;
+    return {
+      data,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum) || 1
+      }
+    };
   },
 
+  syncPackageFeatures,
   checkAndSeedSurveyConfigs: async () => {
     try {
       await syncPackageFeatures();

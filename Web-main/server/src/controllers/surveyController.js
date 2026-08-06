@@ -111,11 +111,12 @@ module.exports = {
 
   getAdminHistory: async (req, res, next) => {
     try {
-      const { search } = req.query;
-      const history = await surveyService.getAllSurveys({ search });
+      const { page, limit, search } = req.query;
+      const result = await surveyService.getAllSurveys({ page, limit, search });
       res.status(200).json({
         success: true,
-        data: history
+        data: result.data,
+        pagination: result.pagination
       });
     } catch (error) {
       next(error);
