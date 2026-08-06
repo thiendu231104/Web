@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { User, CreditCard, History, Check, Eye, EyeOff, Copy, ExternalLink, Clock, KeyRound, RotateCcw, X } from 'lucide-react';
+import { User, CreditCard, History, Check, Eye, EyeOff, Copy, ExternalLink, Clock, KeyRound, RotateCcw, X, ShieldCheck, Lock } from 'lucide-react';
 import { useAuthStore } from '../store';
 import SEO from '../components/SEO';
 import { useWeb3 } from '../hooks/useWeb3';
@@ -135,13 +135,29 @@ export default function Profile() {
   const [showClearTxModal, setShowClearTxModal] = useState(false);
   const [isClearingTx, setIsClearingTx] = useState(false);
 
+  // Change Password Confirmation Modal States
+  const [showConfirmPasswordModal, setShowConfirmPasswordModal] = useState(false);
+  const [pendingPasswordData, setPendingPasswordData] = useState<PasswordFormValues | null>(null);
+
+  // Close Password Confirm Modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showConfirmPasswordModal) {
+        setShowConfirmPasswordModal(false);
+        setPendingPasswordData(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showConfirmPasswordModal]);
+
   const handleConfirmClearTxHistory = async () => {
     setIsClearingTx(true);
     try {
       const success = await clearTransactionsHistory();
       if (success) {
         showToast('success', 'Xóa tất cả lịch sử giao dịch thành công.');
-        await fetchTransactions().catch(() => {});
+        await fetchTransactions().catch(() => { });
       } else {
         showToast('error', 'Xóa lịch sử giao dịch thất bại.');
       }
@@ -159,7 +175,7 @@ export default function Profile() {
       const success = await cancelPendingDeposit(tx.id, tx.txHash);
       if (success) {
         showToast('success', 'Đã hủy lệnh nạp tiền thành công.');
-        await fetchTransactions().catch(() => {});
+        await fetchTransactions().catch(() => { });
       } else {
         showToast('error', 'Hủy lệnh nạp tiền thất bại.');
       }
@@ -412,22 +428,13 @@ export default function Profile() {
 
       let txResponse;
       try {
-        if (feeData && feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
-          txResponse = await signer.sendTransaction({
-            to: config.receiverWallet,
-            value: valueWei,
-            maxFeePerGas: feeData.maxFeePerGas,
-            maxPriorityFeePerGas: feeData.maxPriorityFeePerGas
-          });
-        } else {
-          txResponse = await signer.sendTransaction({
-            to: config.receiverWallet,
-            value: valueWei,
-            gasPrice: gasPrice
-          });
-        }
+        txResponse = await signer.sendTransaction({
+          to: config.receiverWallet,
+          value: valueWei,
+          gasPrice: gasPrice
+        });
       } catch (txErr: any) {
-        console.warn('EIP-1559 transaction failed or maxPriorityFeePerGas unsupported, falling back to legacy transaction:', txErr);
+        console.warn('Transaction failed, retrying with legacy gas price:', txErr);
         txResponse = await signer.sendTransaction({
           to: config.receiverWallet,
           value: valueWei,
@@ -442,7 +449,8 @@ export default function Profile() {
         throw new Error('Giao dịch Blockchain thất bại hoặc không được xác nhận.');
       }
 
-      const res = await depositBlockchain(vndAmount, receipt.hash, walletAddress, config.networkName, pendingDepId);
+      const txHashToUse = receipt.hash || txResponse.hash;
+      const res = await depositBlockchain(vndAmount, txHashToUse, walletAddress, config.networkName, pendingDepId);
 
       if (res.success) {
         showToast('success', `Nạp tiền thành công! Đã cộng ${vndAmount.toLocaleString('vi-VN')} VNĐ vào số dư tài khoản.`);
@@ -454,9 +462,9 @@ export default function Profile() {
     } catch (err: any) {
       console.error('Deposit error:', err);
       if (pendingDepId) {
-        await cancelPendingDeposit(pendingDepId.toString()).catch(() => {});
+        await cancelPendingDeposit(pendingDepId.toString()).catch(() => { });
       } else {
-        await cancelPendingDeposit().catch(() => {});
+        await cancelPendingDeposit().catch(() => { });
       }
       if (err.code === 4001 || err.message?.includes('rejected') || err.message?.includes('User denied')) {
         showToast('error', 'Giao dịch đã bị hủy bởi người dùng.');
@@ -581,19 +589,29 @@ export default function Profile() {
     }
   };
 
-  const onPasswordSubmit = async (data: PasswordFormValues) => {
+  const onPasswordSubmit = (data: PasswordFormValues) => {
+    setPendingPasswordData(data);
+    setShowConfirmPasswordModal(true);
+  };
+
+  const handleConfirmChangePassword = async () => {
+    if (!pendingPasswordData) return;
+    const dataToSubmit = pendingPasswordData;
+    setShowConfirmPasswordModal(false);
     setIsSubmittingPassword(true);
     try {
-      const success = await changePassword(data.oldPassword, data.newPassword);
+      const success = await changePassword(dataToSubmit.oldPassword, dataToSubmit.newPassword);
       if (success) {
         showToast('success', 'Thay đổi mật khẩu thành công!');
         resetPasswordForm();
+        setPendingPasswordData(null);
       } else {
-        showToast('error', 'Đổi mật khẩu thất bại. Vui lòng kiểm tra lại mật khẩu cũ.');
+        showToast('error', 'Đổi mật khẩu thất bại. Vui lòng kiểm tra lại mật khẩu hiện tại.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error changing password:", err);
-      showToast('error', 'Đổi mật khẩu thất bại.');
+      const errMsg = err?.response?.data?.message || err?.message || 'Đổi mật khẩu thất bại.';
+      showToast('error', errMsg);
     } finally {
       setIsSubmittingPassword(false);
     }
@@ -1150,8 +1168,8 @@ export default function Profile() {
                         type="button"
                         onClick={() => setHistoryStatusFilter(f.key as any)}
                         className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${historyStatusFilter === f.key
-                            ? 'bg-red-600 text-white font-medium shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
+                          ? 'bg-red-600 text-white font-medium shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
                           }`}
                       >
                         {f.label}
@@ -1176,8 +1194,8 @@ export default function Profile() {
 
                   if (historyList.length > 0) {
                     return (
-                      <div 
-                        className="overflow-x-auto overflow-y-auto rounded-xl border border-gray-100 bg-white shadow-sm custom-scrollbar" 
+                      <div
+                        className="overflow-x-auto overflow-y-auto rounded-xl border border-gray-100 bg-white shadow-sm custom-scrollbar"
                         style={{ maxHeight: '485px' }}
                       >
                         <style>{`
@@ -1391,11 +1409,10 @@ export default function Profile() {
                     key={f.key}
                     type="button"
                     onClick={() => setTxFilter(f.key as any)}
-                    className={`px-3.5 py-1.5 text-xs font-bold rounded-full transition-all cursor-pointer border ${
-                      txFilter === f.key
-                        ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
+                    className={`px-3.5 py-1.5 text-xs font-bold rounded-full transition-all cursor-pointer border ${txFilter === f.key
+                      ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
+                      }`}
                   >
                     {f.label}
                   </button>
@@ -1475,13 +1492,12 @@ export default function Profile() {
                             <td className="py-2.5 px-4 whitespace-nowrap text-xs font-bold text-slate-900">
                               {tx.packageName || tx.description || (isPlus ? 'Nạp tiền vào tài khoản' : 'Thanh toán gói cước')}
                             </td>
-                            <td className={`py-2.5 px-4 font-bold text-xs whitespace-nowrap ${
-                              isCancelled
-                                ? 'text-slate-400 line-through font-semibold'
-                                : isPlus
+                            <td className={`py-2.5 px-4 font-bold text-xs whitespace-nowrap ${isCancelled
+                              ? 'text-slate-400 line-through font-semibold'
+                              : isPlus
                                 ? 'text-emerald-600'
                                 : 'text-red-600'
-                            }`}>
+                              }`}>
                               {isCancelled ? '' : isPlus ? '+' : '-'}
                               {tx.amount ? tx.amount.toLocaleString('vi-VN') : 0} VNĐ
                             </td>
@@ -1690,11 +1706,10 @@ export default function Profile() {
 
               <div className="flex justify-between items-center py-1 border-b border-slate-50">
                 <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Số tiền giao dịch</span>
-                <span className={`font-extrabold text-sm ${
-                  (selectedTxDetail.type === 'deposit' || selectedTxDetail.direction === 'PLUS')
-                    ? 'text-emerald-600'
-                    : 'text-red-600'
-                }`}>
+                <span className={`font-extrabold text-sm ${(selectedTxDetail.type === 'deposit' || selectedTxDetail.direction === 'PLUS')
+                  ? 'text-emerald-600'
+                  : 'text-red-600'
+                  }`}>
                   {(selectedTxDetail.type === 'deposit' || selectedTxDetail.direction === 'PLUS') ? '+' : '-'}
                   {selectedTxDetail.amount ? selectedTxDetail.amount.toLocaleString('vi-VN') : 0} VNĐ
                 </span>
@@ -1793,6 +1808,68 @@ export default function Profile() {
           </div>
         </div>
       )}
+      {/* Change Password Confirmation Modal */}
+      {showConfirmPasswordModal && (
+        <div
+          onClick={() => {
+            setShowConfirmPasswordModal(false);
+            setPendingPasswordData(null);
+          }}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border border-slate-100 rounded-2xl p-6 max-w-sm w-full shadow-xl animate-scale-up z-50 text-left space-y-4"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-5 h-5 text-primary animate-pulse" />
+              </div>
+              <div>
+                <h4 className="text-base font-extrabold text-slate-900 leading-snug">Xác nhận thay đổi mật khẩu</h4>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bảo mật tài khoản</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed font-semibold bg-slate-50 border border-slate-100 p-3.5 rounded-xl">
+              Bạn có chắc chắn muốn thay đổi mật khẩu tài khoản di động này không?
+            </p>
+
+            <div className="flex space-x-3 pt-1">
+              <button
+                type="button"
+                disabled={isSubmittingPassword}
+                onClick={() => {
+                  setShowConfirmPasswordModal(false);
+                  setPendingPasswordData(null);
+                }}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors focus:outline-none cursor-pointer disabled:opacity-50"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingPassword}
+                onClick={handleConfirmChangePassword}
+                className="flex-1 py-2.5 bg-primary hover:bg-primary-hover text-white font-bold rounded-xl text-xs transition-all shadow-sm focus:outline-none cursor-pointer flex items-center justify-center space-x-1.5 disabled:opacity-50"
+              >
+                {isSubmittingPassword ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Đang đổi...</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Xác nhận đổi</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Re-Register Package Modal */}
       <RegisterModal
         isOpen={isRegisterModalOpen}

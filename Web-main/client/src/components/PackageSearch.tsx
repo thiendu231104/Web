@@ -21,6 +21,15 @@ export default function PackageSearch() {
         setSearch(localSearch);
         fetchPackages();
       }
+      if (localSearch && localSearch.trim()) {
+        sessionStorage.setItem('last_search_keyword', localSearch.trim());
+        sessionStorage.setItem('active_search_keyword', localSearch.trim());
+        sessionStorage.setItem('current_search_keyword', localSearch.trim());
+      } else {
+        sessionStorage.removeItem('last_search_keyword');
+        sessionStorage.removeItem('active_search_keyword');
+        sessionStorage.removeItem('current_search_keyword');
+      }
     }, 400);
 
     return () => clearTimeout(handler);
@@ -29,6 +38,9 @@ export default function PackageSearch() {
   const handleClear = () => {
     setLocalSearch('');
     setSearch('');
+    sessionStorage.removeItem('last_search_keyword');
+    sessionStorage.removeItem('active_search_keyword');
+    sessionStorage.removeItem('current_search_keyword');
     fetchPackages();
   };
 

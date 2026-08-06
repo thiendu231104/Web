@@ -31,7 +31,7 @@ interface AuthState {
   deposit: (amount: number, method: string) => Promise<boolean>;
   depositBlockchain: (amount: number, txHash: string, walletAddress: string, network: string, depositId?: string | number) => Promise<{ success: boolean; message: string; balance?: number }>;
   subscribePackage: (pkg: Package) => Promise<{ success: boolean; message: string }>;
-  registerSubscription: (packageId: number, cycle: 'DAY' | 'MONTH' | 'YEAR') => Promise<{ success: boolean; message: string }>;
+  registerSubscription: (packageId: number, cycle: 'DAY' | 'MONTH' | 'YEAR', source?: string) => Promise<{ success: boolean; message: string }>;
   unsubscribePackage: (packageId: string) => Promise<boolean>;
   toggleAutoRenew: (subscriptionId: string, autoRenew: boolean) => Promise<boolean>;
   cancelSubscription: (subscriptionId: string) => Promise<boolean>;
@@ -240,9 +240,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return get().registerSubscription(pkgId, cycle);
   },
 
-  registerSubscription: async (packageId, cycle) => {
+  registerSubscription: async (packageId, cycle, source) => {
     try {
-      const result = await authApi.registerSubscription(packageId, cycle);
+      const result = await authApi.registerSubscription(packageId, cycle, source);
 
       // Immediately update the balance in store to synchronize the state
       if (result && result.balance !== undefined) {
@@ -520,7 +520,7 @@ interface PackageState {
   removeFromCompare: (packageId: string) => void;
   clearCompare: () => void;
   fetchPackages: (params?: Record<string, any>) => Promise<void>;
-  fetchPackageById: (id: string) => Promise<void>;
+  fetchPackageById: (id: string, searchKeyword?: string) => Promise<void>;
   addPackage: (pkg: Omit<Package, 'id' | 'phan_khuc_gia'>) => Promise<boolean>;
   updatePackage: (id: string, updated: Partial<Package>) => Promise<boolean>;
   deletePackage: (id: string) => Promise<boolean>;
@@ -658,10 +658,10 @@ export const usePackageStore = create<PackageState>((set, get) => ({
     }
   },
 
-  fetchPackageById: async (id) => {
+  fetchPackageById: async (id, searchKeyword) => {
     set({ loading: true, error: null, currentPackage: null });
     try {
-      const pkg = await packageApi.fetchPackageById(id);
+      const pkg = await packageApi.fetchPackageById(id, searchKeyword);
 
       set({ currentPackage: pkg, loading: false });
     } catch (err: any) {

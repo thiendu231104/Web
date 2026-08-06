@@ -166,7 +166,6 @@ export const packageApi = {
     const response = await axiosInstance.get<any>(API_BASE_URL, { params });
     const rawData = response.data;
 
-
     return {
       packages: (rawData.packages || []).map(toVietnamesePackage),
       page: rawData.page,
@@ -176,11 +175,16 @@ export const packageApi = {
     };
   },
 
-  fetchPackageById: async (id: string): Promise<Package> => {
-    const response = await axiosInstance.get<any>(`${API_BASE_URL}/${id}`);
-
+  fetchPackageById: async (id: string, searchKeyword?: string): Promise<Package> => {
+    const params = searchKeyword ? { search_keyword: searchKeyword } : undefined;
+    const response = await axiosInstance.get<any>(`${API_BASE_URL}/${id}`, { params });
 
     return toVietnamesePackage(response.data);
+  },
+
+  fetchRecentlyViewedPackages: async (): Promise<Package[]> => {
+    const response = await axiosInstance.get<any>(`${API_BASE_URL}/recently-viewed`);
+    return (response.data.packages || []).map(toVietnamesePackage);
   },
 
   fetchFilterOptions: async (): Promise<FilterOptions> => {
@@ -301,8 +305,14 @@ export const authApi = {
     return response.data;
   },
 
-  registerSubscription: async (packageId: number, cycle: 'DAY' | 'MONTH' | 'YEAR'): Promise<any> => {
-    const response = await axiosInstance.post('/api/subscriptions/register', { packageId, cycle });
+  registerSubscription: async (packageId: number, cycle: 'DAY' | 'MONTH' | 'YEAR', source?: string): Promise<any> => {
+    const search_keyword = sessionStorage.getItem('last_search_keyword') || sessionStorage.getItem('active_search_keyword') || sessionStorage.getItem('current_search_keyword') || undefined;
+    const flow_source = source || sessionStorage.getItem('active_flow_source') || undefined;
+    const response = await axiosInstance.post('/api/subscriptions/register', { packageId, cycle, search_keyword, source: flow_source });
+    sessionStorage.removeItem('last_search_keyword');
+    sessionStorage.removeItem('active_search_keyword');
+    sessionStorage.removeItem('current_search_keyword');
+    sessionStorage.removeItem('active_flow_source');
     return response.data;
   },
 

@@ -81,10 +81,10 @@ export default function Compare() {
 
   // Khởi tạo guest_id duy nhất
   useEffect(() => {
-    let gId = localStorage.getItem('guest_compare_id');
+    let gId = sessionStorage.getItem('guest_compare_id');
     if (!gId) {
       gId = 'guest_' + Math.random().toString(36).substring(2, 11);
-      localStorage.setItem('guest_compare_id', gId);
+      sessionStorage.setItem('guest_compare_id', gId);
     }
     guestIdRef.current = gId;
 
@@ -145,7 +145,7 @@ export default function Compare() {
 
   useEffect(() => {
     if (packages.length === 0) {
-      fetchPackages();
+      fetchPackages({ limit: 1000, page: 1 });
     }
   }, [packages.length, fetchPackages]);
 
@@ -646,7 +646,7 @@ export default function Compare() {
                           <div className="flex justify-between items-center text-[10px] text-slate-500 font-bold">
                             <span>{new Intl.NumberFormat('vi-VN').format(p.gia)}đ</span>
                             <span>{p.chu_ky_ngay} ngày</span>
-                            <span>{normalizeDataLimit(p.data_theo_ngay) || 'Không data'}</span>
+                            <span>{normalizeDataLimit(p.data_theo_ngay || '') || 'Không data'}</span>
                           </div>
                         </button>
                       );

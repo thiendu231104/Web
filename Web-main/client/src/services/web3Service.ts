@@ -11,7 +11,7 @@ export const getBlockchainConfig = () => {
     networkName: import.meta.env.VITE_NETWORK_NAME || 'Sepolia',
     chainIdDecimal: String(chainIdDecimal),
     chainIdHex,
-    rpcUrl: import.meta.env.VITE_RPC_URL || 'https://sepolia.drpc.org',
+    rpcUrl: import.meta.env.VITE_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com',
     blockExplorer: import.meta.env.VITE_BLOCK_EXPLORER || 'https://sepolia.etherscan.io',
     receiverWallet: import.meta.env.VITE_RECEIVER_WALLET || '0x26FE0B08bB4d0BCc05e04248770e6E2731a04137'
   };

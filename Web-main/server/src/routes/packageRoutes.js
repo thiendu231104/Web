@@ -8,7 +8,7 @@ router.get('/search', decodeTokenOptional, packageController.searchPackages);
 router.get('/filter', packageController.getFilterOptions);
 router.get('/categories', packageController.getCategories);
 router.get('/providers', packageController.getProviders);
-
+router.get('/recently-viewed', decodeTokenOptional, packageController.getRecentlyViewedPackages);
 router.get('/', decodeTokenOptional, packageController.getPackages);
 router.get('/:id', decodeTokenOptional, packageController.getPackageById);
 

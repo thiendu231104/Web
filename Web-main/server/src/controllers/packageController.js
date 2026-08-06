@@ -1,7 +1,9 @@
 const mongoose = require('mongoose');
 const Package = require('../models/Package');
 const PackageFeature = require('../models/PackageFeature');
+const UserActivity = require('../models/UserActivity');
 const { canViewPackage } = require('../utils/permission');
+const { logUserActivity } = require('../utils/userActivityLogger');
 
 function normalizeNetwork(loaiMangVal) {
   if (!loaiMangVal) return [];
@@ -672,10 +674,124 @@ exports.getPackageById = async (req, res) => {
       mapped.price = feat.price || mapped.gia || 0;
     }
 
+    // Logic điều hướng ghi log duy nhất (Phòng chống duplicate log)
+    const searchKeyword = req.query.search_keyword || req.query.searchKeyword;
+    if (searchKeyword && String(searchKeyword).trim() !== '') {
+      // Luồng 1: Tìm kiếm -> Xem chi tiết (SEARCH_VIEW)
+      await logUserActivity({
+        req,
+        actionType: 'SEARCH',
+        flowType: 'SEARCH_VIEW',
+        source: 'search',
+        packageId: mapped.numericId,
+        searchKeyword: String(searchKeyword).trim()
+      });
+    } else {
+      // Luồng Mặc định: Chỉ xem chi tiết (VIEW_ONLY)
+      await logUserActivity({
+        req,
+        actionType: 'VIEW_PACKAGE',
+        flowType: 'VIEW_ONLY',
+        source: 'detail',
+        packageId: mapped.numericId,
+        searchKeyword: null
+      });
+    }
+
     res.json(mapped);
   } catch (error) {
     console.error("Error in getPackageById API:", error);
     res.status(500).json({ success: false, message: "Lỗi lấy chi tiết gói cước." });
+  }
+};
+
+// 6b. GET /packages/recently-viewed - Fetch 4 distinct recently viewed/interacted packages for Home page
+exports.getRecentlyViewedPackages = async (req, res) => {
+  try {
+    const userId = req.user ? (req.user.user_id ?? req.user.id ?? null) : null;
+    const sessionId = req.headers['x-session-id'] || req.headers['session-id'] || req.cookies?.sessionId || req.query?.session_id;
+
+    let queryFilter = null;
+    if (userId !== null && userId !== undefined) {
+      queryFilter = { user_id: Number(userId) };
+    } else if (sessionId) {
+      queryFilter = { session_id: String(sessionId).trim(), user_id: null };
+    }
+
+    if (!queryFilter) {
+      return res.json({ success: true, packages: [] });
+    }
+
+    queryFilter.action_type = { $in: ['VIEW_PACKAGE', 'SEARCH', 'COMPARE', 'SUBSCRIBE', 'COMPARE_AND_SUBSCRIBE'] };
+
+    const activities = await UserActivity.find(queryFilter)
+      .sort({ created_at: -1 })
+      .limit(50)
+      .lean();
+
+    const seenPackageIds = new Set();
+    const orderedPackageIds = [];
+
+    for (const act of activities) {
+      if (act.package_id && !seenPackageIds.has(act.package_id)) {
+        seenPackageIds.add(act.package_id);
+        orderedPackageIds.push(act.package_id);
+        if (orderedPackageIds.length >= 4) break;
+      }
+    }
+
+    if (orderedPackageIds.length === 0) {
+      return res.json({ success: true, packages: [] });
+    }
+
+    const rawPackages = await Package.find({ package_id: { $in: orderedPackageIds } });
+    const features = await PackageFeature.find({ package_id: { $in: orderedPackageIds } });
+    const featuresMap = new Map();
+    features.forEach(f => featuresMap.set(f.package_id, f));
+
+    const mappedMap = new Map();
+    rawPackages.forEach(pkg => {
+      const mapped = mapToEnglish(pkg);
+      if (canViewPackage(req.user, mapped)) {
+        const feat = featuresMap.get(mapped.numericId) || {};
+        const merged = {
+          ...mapped,
+          has_5g: feat.has_5g !== undefined ? feat.has_5g : false,
+          has_data: feat.has_data !== undefined ? feat.has_data : (Boolean(mapped.data_theo_ngay) && mapped.data_theo_ngay !== '0'),
+          has_voice: feat.has_voice !== undefined ? feat.has_voice : (mapped.free_noi_mang > 0 || mapped.free_ngoai_mang > 0),
+          has_sms: feat.has_sms !== undefined ? feat.has_sms : (mapped.sms > 0),
+          has_youtube: feat.has_youtube !== undefined ? feat.has_youtube : false,
+          has_tiktok: feat.has_tiktok !== undefined ? feat.has_tiktok : false,
+          has_facebook: feat.has_facebook !== undefined ? feat.has_facebook : false,
+          has_tv360: feat.has_tv360 !== undefined ? feat.has_tv360 : false,
+          has_movie: feat.has_movie !== undefined ? feat.has_movie : false,
+          has_social: feat.has_social !== undefined ? feat.has_social : false,
+          is_combo: feat.is_combo !== undefined ? feat.is_combo : (mapped.phan_loai_goi === 'Combo'),
+          is_data_only: feat.is_data_only !== undefined ? feat.is_data_only : (mapped.phan_loai_goi === 'Data'),
+          is_social: feat.is_social !== undefined ? feat.is_social : (mapped.phan_loai_goi === 'Social'),
+          is_addon: feat.is_addon !== undefined ? feat.is_addon : Boolean(mapped.is_addon),
+          price_level: feat.price_level || 'medium',
+          data_level: feat.data_level || 'medium',
+          voice_level: feat.voice_level || 'none',
+          sms_level: feat.sms_level || 'none',
+          cycle_days: feat.cycle_days || mapped.chu_ky_ngay || 30,
+          price: feat.price || mapped.gia || 0
+        };
+        mappedMap.set(mapped.numericId, merged);
+      }
+    });
+
+    const finalPackages = [];
+    for (const pkgId of orderedPackageIds) {
+      if (mappedMap.has(pkgId)) {
+        finalPackages.push(mappedMap.get(pkgId));
+      }
+    }
+
+    res.json({ success: true, packages: finalPackages });
+  } catch (error) {
+    console.error("Error in getRecentlyViewedPackages API:", error);
+    res.status(500).json({ success: false, message: "Lỗi lấy danh sách gói cước vừa xem." });
   }
 };
 

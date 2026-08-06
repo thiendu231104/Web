@@ -4,9 +4,10 @@ import {
   Sparkles, MessageSquare, ArrowRight, ChevronDown,
   Wifi, Zap, RefreshCw, CheckCircle2, Bot, ClipboardList,
   Signal, Users, ShieldCheck, HeadphonesIcon, Search,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Clock
 } from 'lucide-react';
 import { usePackageStore, useAuthStore } from '../store';
+import { packageApi } from '../services/api';
 import PackageCard from '../components/PackageCard';
 import RegisterModal from '../components/RegisterModal';
 import SEO from '../components/SEO';
@@ -160,6 +161,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<string>('hot');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [activeVideoIndex, setActiveVideoIndex] = useState<number>(0);
+  const [recentlyViewedPkgs, setRecentlyViewedPkgs] = useState<Package[]>([]);
 
   // ── Section refs for smooth scroll ───────────────────────────────────────
   const packagesSectionRef = useRef<HTMLElement>(null);
@@ -169,6 +171,14 @@ export default function Home() {
     const store = usePackageStore.getState();
     store.reset();
     fetchPackages({ limit: 999, page: 1, search: '' });
+
+    packageApi.fetchRecentlyViewedPackages()
+      .then(res => {
+        setRecentlyViewedPkgs(res || []);
+      })
+      .catch(err => {
+        console.error("Error fetching recently viewed packages:", err);
+      });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -407,6 +417,41 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* SECTION: RECENTLY VIEWED PACKAGES (PERSONALIZED)                   */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {recentlyViewedPkgs.length > 0 && (
+        <section className="mt-10 space-y-5 text-left animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 bg-gradient-to-r from-red-50/80 via-white to-slate-50 border border-red-100 rounded-2xl p-5 shadow-xs">
+            <div>
+              <span className="inline-flex items-center gap-1.5 bg-red-100/80 text-primary text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider mb-1.5">
+                <Clock className="w-3 h-3 text-primary animate-pulse" />
+                Dành cho bạn
+              </span>
+              <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                Gói cước bạn quan tâm gần đây
+              </h2>
+              <p className="text-slate-500 text-xs font-semibold mt-0.5">
+                Danh sách các gói cước bạn vừa tìm kiếm, so sánh hoặc xem chi tiết
+              </p>
+            </div>
+            <span className="text-[11px] font-extrabold text-slate-400 bg-slate-100 px-3 py-1 rounded-lg">
+              {recentlyViewedPkgs.length} gói cước
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {recentlyViewedPkgs.map(pkg => (
+              <PackageCard
+                key={`recent_${pkg.id || pkg.package_id}`}
+                pkg={pkg}
+                onSubscribe={handleSubscribeOpen}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════════ */}
       {/* SECTION 3: PACKAGE TABS                                           */}

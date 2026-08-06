@@ -32,6 +32,8 @@ export interface GoiCuocEntity {
 
   // Đối tượng & Mô tả
   doi_tuong_ap_dung?: string;
+  dieu_kien_dang_ky?: string;
+  chinh_sach_ap_dung?: string;
   tien_ich_free?: string | null;
   noi_dung_ngoai?: string | null;
   uudaitrong?: string;

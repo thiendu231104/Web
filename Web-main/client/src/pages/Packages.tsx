@@ -57,6 +57,10 @@ export default function Packages() {
   useEffect(() => {
     usePackageStore.getState().setSearch(keywordParam);
     usePackageStore.getState().setFilter('keyword', keywordParam);
+    if (keywordParam && keywordParam.trim()) {
+      sessionStorage.setItem('active_search_keyword', keywordParam.trim());
+      sessionStorage.setItem('current_search_keyword', keywordParam.trim());
+    }
     fetchPackages({ search: keywordParam });
   }, [keywordParam, fetchPackages]);
 

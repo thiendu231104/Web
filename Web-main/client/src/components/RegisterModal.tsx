@@ -11,6 +11,7 @@ interface RegisterModalProps {
   onClose: () => void;
   onSuccess?: (msg: string) => void;
   onError?: (msg: string) => void;
+  source?: string;
 }
 
 /**
@@ -61,7 +62,8 @@ export default function RegisterModal({
   pkg,
   onClose,
   onSuccess,
-  onError
+  onError,
+  source
 }: RegisterModalProps) {
   const { currentUser, registerSubscription, checkSubscription } = useAuthStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -162,7 +164,7 @@ export default function RegisterModal({
     const executeRegistration = async () => {
       setIsSubmitting(true);
       try {
-        const regRes = await registerSubscription(pkgId, cycle);
+        const regRes = await registerSubscription(pkgId, cycle, source);
         if (regRes.success) {
           const msg = regRes.message || 'Đăng ký gói cước thành công!';
           if (onSuccess) onSuccess(msg);

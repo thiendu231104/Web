@@ -3,20 +3,23 @@ const transactionService = require('../services/transactionService');
 const transactionController = {
   deposit: async (req, res, next) => {
     try {
-      const { amount, method, txHash, walletAddress, network, depositId } = req.body;
-      if (amount === undefined || amount === null || amount === '') {
+      console.log('👉 Deposit Payload received:', req.body);
+      const { amount, amountVND, amountETH, method, txHash, walletAddress, network, depositId } = req.body;
+      const targetAmount = amountVND !== undefined && amountVND !== null ? Number(amountVND) : Number(amount);
+
+      if (!targetAmount || isNaN(targetAmount) || targetAmount <= 0) {
         return res.status(400).json({
           success: false,
-          message: 'Số tiền nạp là bắt buộc.'
+          message: 'Thiếu thông tin giao dịch txHash hoặc số tiền'
         });
       }
 
       let result;
-      if (txHash && walletAddress && network) {
+      if (txHash && walletAddress) {
         result = await transactionService.depositBlockchain(
           req.user.user_id,
-          amount,
-          network,
+          targetAmount,
+          network || 'Sepolia',
           txHash,
           walletAddress,
           depositId
@@ -24,7 +27,7 @@ const transactionController = {
       } else {
         result = await transactionService.depositFiat(
           req.user.user_id,
-          amount
+          targetAmount
         );
       }
 
@@ -34,9 +37,10 @@ const transactionController = {
         data: result
       });
     } catch (error) {
+      console.error('❌ Error in deposit controller:', error);
       return res.status(400).json({
         success: false,
-        message: error.message
+        message: error.message || 'Lỗi xử lý giao dịch nạp tiền.'
       });
     }
   },

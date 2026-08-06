@@ -90,7 +90,12 @@ export default function PackageDetail() {
   // Auto scroll to top on router parameter change
   useEffect(() => {
     if (ma_goi) {
-      fetchPackageById(ma_goi);
+      const storedSearchKeyword = sessionStorage.getItem('last_search_keyword') || sessionStorage.getItem('active_search_keyword') || sessionStorage.getItem('current_search_keyword');
+      fetchPackageById(ma_goi, storedSearchKeyword || undefined);
+      sessionStorage.removeItem('last_search_keyword');
+      sessionStorage.removeItem('active_search_keyword');
+      sessionStorage.removeItem('current_search_keyword');
+      sessionStorage.removeItem('active_flow_source');
     }
     if (packages.length === 0) {
       fetchPackages();

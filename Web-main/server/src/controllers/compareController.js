@@ -1,6 +1,7 @@
 const CompareHistory = require('../models/CompareHistory');
 const Package = require('../models/Package');
 const aiService = require('../services/ai/ai.service');
+const { logUserActivity } = require('../utils/userActivityLogger');
 
 const sanitizeMaGoiArray = (arr) => {
   if (!arr || !Array.isArray(arr)) return [];

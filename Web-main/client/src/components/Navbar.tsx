@@ -85,8 +85,14 @@ export default function Navbar() {
     e.preventDefault();
     const query = searchQuery.trim();
     if (query) {
+      sessionStorage.setItem('last_search_keyword', query);
+      sessionStorage.setItem('active_search_keyword', query);
+      sessionStorage.setItem('current_search_keyword', query);
       navigate(`/packages?search=${encodeURIComponent(query)}`);
     } else {
+      sessionStorage.removeItem('last_search_keyword');
+      sessionStorage.removeItem('active_search_keyword');
+      sessionStorage.removeItem('current_search_keyword');
       navigate('/packages');
     }
     setIsMenuOpen(false);

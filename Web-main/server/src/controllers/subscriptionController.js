@@ -1,4 +1,5 @@
 const subscriptionService = require('../services/subscriptionService');
+const { logUserActivity, logOrMergeActivity } = require('../utils/userActivityLogger');
 
 module.exports = {
   check: async (req, res, next) => {
@@ -36,6 +37,31 @@ module.exports = {
       }
 
       const { subscription, account, pkg } = await subscriptionService.registerSubscription(userId, packageId, cycle);
+
+      // Activity Logging for Subscription via logOrMergeActivity (Session-Scoped Package Aggregation)
+      const targetPackageId = pkg ? pkg.package_id : packageId;
+      const cleanKeyword = req.body?.search_keyword ? String(req.body.search_keyword).trim() : null;
+      const requestSource = req.body?.source ? String(req.body.source).toLowerCase() : null;
+
+      let targetFlowType = 'VIEW_SUBSCRIBE';
+      let targetSource = 'detail';
+
+      if (requestSource === 'compare' || req.body?.source === 'COMPARE') {
+        targetFlowType = 'COMPARE_SUBSCRIBE';
+        targetSource = 'compare';
+      } else if (cleanKeyword || requestSource === 'search') {
+        targetFlowType = 'SEARCH_SUBSCRIBE_DIRECT';
+        targetSource = 'search';
+      }
+
+      await logOrMergeActivity({
+        req,
+        packageId: targetPackageId,
+        actionType: 'SUBSCRIBE',
+        flowType: targetFlowType,
+        source: targetSource,
+        searchKeyword: cleanKeyword
+      });
 
       res.status(200).json({
         success: true,
@@ -173,7 +199,23 @@ module.exports = {
         });
       }
 
+      let targetPackageId = null;
+      try {
+        const UserSubscription = require('../models/UserSubscription');
+        const subDoc = await UserSubscription.findById(subscriptionId);
+        if (subDoc) {
+          targetPackageId = subDoc.packageId;
+        }
+      } catch (e) {}
+
       await subscriptionService.cancelSubscription(userId, subscriptionId);
+
+      logUserActivity({
+        req,
+        actionType: 'CANCEL',
+        packageId: targetPackageId
+      });
+
       res.status(200).json({
         success: true,
         message: 'Hủy đăng ký gói cước thành công!'

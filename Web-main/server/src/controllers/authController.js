@@ -12,6 +12,29 @@ const authController = {
       }
 
       const result = await authService.login(phoneNumber, password);
+
+      // Session Merge: Migrate guest user_activities with matching session_id to user_id upon login
+      const sessionId = req.headers['x-session-id'] ||
+                        req.headers['session-id'] ||
+                        req.cookies?.sessionId ||
+                        req.body?.session_id ||
+                        req.query?.session_id;
+
+      if (sessionId && result.user && (result.user.user_id !== undefined || result.user.id !== undefined)) {
+        try {
+          const UserActivity = require('../models/UserActivity');
+          const cleanSessionId = String(sessionId).trim();
+          const targetUserId = Number(result.user.user_id ?? result.user.id);
+          const updateRes = await UserActivity.updateMany(
+            { session_id: cleanSessionId, user_id: null },
+            { $set: { user_id: targetUserId } }
+          );
+          console.log(`[SessionMerge] Merged guest activities for session ${cleanSessionId} to user_id ${targetUserId}. Modified: ${updateRes.modifiedCount}`);
+        } catch (e) {
+          console.error('[SessionMerge] Error merging guest activities:', e.message || e);
+        }
+      }
+
       return res.status(200).json({
         success: true,
         message: 'Đăng nhập thành công!',

@@ -44,6 +44,11 @@ export default function App() {
   const { fetchMe, authChecked } = useAuthStore();
 
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      const newGuestSessionId = 'guest_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+      sessionStorage.setItem('guest_session_id', newGuestSessionId);
+    }
     fetchMe();
   }, [fetchMe]);
 

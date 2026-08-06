@@ -34,6 +34,15 @@ export default function AdvancedFilter() {
       if (localSearch !== filters.keyword) {
         setFilter('keyword', localSearch);
       }
+      if (localSearch && localSearch.trim()) {
+        sessionStorage.setItem('last_search_keyword', localSearch.trim());
+        sessionStorage.setItem('active_search_keyword', localSearch.trim());
+        sessionStorage.setItem('current_search_keyword', localSearch.trim());
+      } else {
+        sessionStorage.removeItem('last_search_keyword');
+        sessionStorage.removeItem('active_search_keyword');
+        sessionStorage.removeItem('current_search_keyword');
+      }
     }, 300);
     return () => clearTimeout(handler);
   }, [localSearch, filters.keyword, setFilter]);
