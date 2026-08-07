@@ -224,3 +224,23 @@
 .bot-msg-markdown th {
   background-color: #F8FAFC;
 }
+
+/* Tối ưu khoảng cách và bố cục cho nội dung Markdown trong bong bóng Chat */
+.chat-message-content p {
+  margin-top: 0;
+  margin-bottom: 12px !important;
+  line-height: 1.6;
+}
+.chat-message-content ul, 
+.chat-message-content ol {
+  padding-left: 20px !important;
+  margin-top: 8px !important;
+  margin-bottom: 12px !important;
+}
+.chat-message-content li {
+  margin-bottom: 8px !important;
+  line-height: 1.5;
+}
+.chat-message-content li:last-child {
+  margin-bottom: 0 !important;
+}

@@ -1,45 +1,37 @@
 /**
- * promptBuilder.js — Grounded Response Prompt Generator (LLM Pass 2)
+ * promptBuilder.js — Pure RAG Grounded Response Generator (LLM Pass 2)
  *
  * Chức năng:
- * 1. Chuyển đổi danh sách gói cước được Backend truy vấn từ MongoDB thành Minimal JSON Context.
- * 2. Xây dựng System Instruction & User Prompt tuân thủ nghiêm ngặt nguyên tắc RAG Grounding:
- *    - NGUYÊN TẮC SOURCE OF TRUTH: MongoDB là dữ liệu duy nhất. Không bịa đặt gói cước hay ưu đãi.
- *    - KHÔNG DÙNG TỪ NGỮ KỸ THUẬT: Không bao giờ in "Theo Context", "Theo CSDL", "Dữ liệu JSON".
- *    - ĐỊNH DẠNG RÕ RÀNG: Trình bày từng gói cước theo dạng danh sách bullet points đẹp mắt với cú pháp đăng ký chuẩn.
+ * 1. Chuyển đổi danh sách gói cước từ MongoDB thành JSON Context sạch gọn: { ma_goi, ten, gia, chu_ky, uu_dai_data, uu_dai_thoai, uu_dai_mxh }.
+ * 2. Cung cấp SYSTEM_PROMPT_RESPONSE_GENERATOR chuẩn mực tuân thủ NGUYÊN TẮC THÉP.
  */
 
-const SYSTEM_PROMPT_RESPONSE_GENERATOR = `BẠN LÀ TRỢ LÝ ẢO TƯ VẤN GÓI CƯỚC DI ĐỘNG VIETTEL.
-Nhiệm vụ của bạn là đưa ra lời dẫn tự nhiên, ngắn gọn và định hướng người dùng xem/đăng ký gói cước.
+const SYSTEM_PROMPT_RESPONSE_GENERATOR = `BỐI CẢNH (ROLE):
+Bạn là Trợ lý tư vấn gói cước Viettel. Nhiệm vụ của bạn là tư vấn ngắn gọn, chính xác tuyệt đối dựa trên [Danh sách gói cước] (Context) được hệ thống cung cấp.
 
-NGUYÊN TẮC CHỐNG ẢO GIÁC (ANTI-HALLUCINATION & RAG GROUNDING):
-1. MONGODB LÀ SOURCE OF TRUTH DUY NHẤT:
-   - Tất cả thông tin gói cước CHỈ ĐƯỢC LẤY TỪ DỮ LIỆU CONTEXT ĐƯỢC BACKEND CUNG CẤP.
-   - TUYỆT ĐỐI KHÔNG tự tạo ra hoặc tự bịa tên gói cước, mức giá, ưu đãi không có trong dữ liệu.
+NGUYÊN TẮC THÉP - BẮT BUỘC TUÂN THỦ (STRICT GUARDRAILS):
+1. KHI DANH SÁCH GÓI CƯỚC RỖNG (Context rỗng \`[]\` hoặc không có gói nào):
+- Nếu người dùng hỏi đích danh tên gói cước (target_package) nhưng không có trong CSDL: BẮT BUỘC phản hồi: "Dạ, hiện tại Viettel chưa có/không hỗ trợ gói cước [Mã gói cước]. Bạn kiểm tra lại tên gói cước giúp mình nhé!"
+- Với các trường hợp khác: BẮT BUỘC trả lời nguyên văn 1 câu duy nhất: "Dạ xin lỗi bạn, hiện tại Viettel chưa có gói cước nào khớp chính xác với toàn bộ yêu cầu và ngân sách của bạn. Bạn có thể thay đổi số tiền hoặc nhu cầu để mình kiểm tra lại nhé."
+- TUYỆT ĐỐI CẤM bịa ra gói cước khác. TUYỆT ĐỐI CẤM nhắc lại gói cước của lượt chat cũ.
 
-2. CẤM CÂU DẪN RÁC KỸ THUẬT:
-   - KHÔNG in các câu như: "Dựa trên Context...", "Theo CSDL...", "Dữ liệu gói cước JSON...".
+2. CHỐNG ẢO GIÁC THÔNG TIN (ZERO HALLUCINATION):
+- CHỈ ĐƯỢC nhắc đến tên gói cước, giá tiền, chu kỳ CÓ TRONG CONTEXT.
+- CẤM TUYỆT ĐỐI tự đổi chu kỳ của gói (Ví dụ: Gói 12SD90 có chu kỳ 360 ngày, tuyệt đối cấm nói thành 30 ngày).
+- Nếu gói cước hệ thống cung cấp có giá CAO HƠN ngân sách khách có, BẮT BUỘC nói: "Dạ, với mức giá [Ngân sách khách] thì hiện chưa có gói phù hợp. Gói tiết kiệm nhất hiện có là [Tên gói] ([Giá gói])..."
 
-3. QUY TẮC HIỂN THỊ THÔNG TIN (TỐI ƯU CHO UI CARDS):
-   - Phía Client ĐÃ CÓ sẵn các Thẻ UI (UI Cards) hiển thị chi tiết thông số gói cước bên dưới.
-   - Vì vậy, câu trả lời dạng văn bản của bạn CHỈ CẦN:
-     + 01 Lời mở đầu ngắn gọn (1 câu), gọi tên các gói cước phù hợp nhất.
-     + 01 Lời nhắn nhẹ nhàng hướng dẫn khách hàng tham khảo chi tiết hoặc bấm nút "Đăng ký" ngay tại các Thẻ thông tin phía dưới.
-   - CẤM TUYỆT ĐỐI: Không tự liệt kê lại chi tiết toàn bộ thông số (Phút gọi, Data, Cú pháp) thành danh sách dạng văn bản dài dòng.
+3. CẤM BỊA CÚ PHÁP ĐĂNG KÝ (NO SMS HALLUCINATION):
+- TUYỆT ĐỐI CẤM các từ khóa: "soạn tin nhắn", "cú pháp", "gửi 191". 
+- BẮT BUỘC hướng dẫn bằng câu: "Bạn xem chi tiết và bấm đăng ký nhanh ở thông tin ngay bên dưới nhé."
 
-4. XỬ LÝ KHI KHÔNG TÌM THẤY GÓI (CONTEXT RỖNG):
-   - Thông báo lịch sự rằng chưa tìm thấy gói khớp chính xác tuyệt đối, gợi ý khách thay đổi mốc ngân sách hoặc chu kỳ.
+4. VĂN PHONG VÀ ĐỘ DÀI:
+- CẤM các câu dẫn nhập sáo rỗng, dài dòng kiểu robot như: "Tôi hiểu rằng bạn đang tìm kiếm...", "Tôi thấy rằng...", "Tôi có một số gợi ý...".
+- NGẮN GỌN, TRỰC DIỆN. Xưng "Chào bạn" hoặc "Dạ".
 
-5. NẾU YÊU CẦU CHƯA RÕ RÀNG:
-   - Trả lời thân thiện và chủ động hỏi lại 1 câu ngắn gọn để làm rõ nhu cầu.`;
-
-/**
- * Format số tiền VND thành chuỗi dễ đọc
- */
-function formatPrice(price) {
-  if (price == null || isNaN(Number(price))) return '0đ';
-  return Number(price).toLocaleString('vi-VN') + 'đ';
-}
+VÍ DỤ PHẢN HỒI CHUẨN MỰC:
+- (Khi có gói phù hợp): "Chào bạn, với nhu cầu data 3 ngày, bạn tham khảo gói ST15K (15.000đ) nhé. Bạn xem chi tiết và bấm đăng ký nhanh ở thông tin ngay bên dưới."
+- (Khi không tìm thấy gói đích danh): "Dạ, hiện tại Viettel chưa có/không hỗ trợ gói cước ABC99. Bạn kiểm tra lại tên gói cước giúp mình nhé!"
+- (Khi thiếu ngân sách): "Dạ, với ngân sách 300k thì hiện chưa có gói 1 năm phù hợp. Gói 1 năm tiết kiệm nhất hiện nay là 12SD90 (1.080.000đ/360 ngày). Chi tiết bạn tham khảo ở thông tin bên dưới nhé!"`;
 
 /**
  * Format chu kỳ ngày thành chuỗi dễ đọc
@@ -50,7 +42,7 @@ function formatCycle(chu_ky_ngay) {
   if (days === 360) return '360 ngày (1 năm)';
   if (days === 180) return '180 ngày (6 tháng)';
   if (days === 90) return '90 ngày (3 tháng)';
-  if (days === 30) return '30 ngày (1 tháng)';
+  if (days === 30) return '30 ngày';
   if (days === 15) return '15 ngày';
   if (days === 7) return '7 ngày (1 tuần)';
   return `${days} ngày`;
@@ -59,94 +51,55 @@ function formatCycle(chu_ky_ngay) {
 /**
  * Kiểm tra xem chuỗi có dữ liệu hợp lệ thực sự không
  */
-function checkValidValue(val) {
-  if (!val) return false;
-  const s = String(val).trim().toUpperCase();
-  return (
-    s !== '' &&
-    s !== '0' &&
-    s !== '0GB' &&
-    s !== '0 GB' &&
-    s !== '0GB/NGÀY' &&
-    s !== '0GB/NGAY' &&
-    s !== '0 GB/NGÀY' &&
-    s !== '0 GB/NGAY' &&
-    s !== '0GB/THÁNG' &&
-    s !== '0GB/THANG' &&
-    s !== '0 GB/THÁNG' &&
-    s !== '0 GB/THANG' &&
-    s !== '0 PHÚT' &&
-    s !== '0 PHUT' &&
-    s !== '0 SMS' &&
-    s !== 'NULL' &&
-    s !== 'UNDEFINED' &&
-    s !== 'KHÔNG' &&
-    s !== 'KHONG' &&
-    s !== 'KHÔNG CÓ' &&
-    s !== 'KHONG CO'
-  );
+function isValidVal(val) {
+  if (val == null) return false;
+  const s = String(val).trim().toLowerCase();
+  return s !== '' && s !== 'null' && s !== 'undefined' && s !== '0' && s !== 'false';
 }
 
 /**
- * Xử lý cú pháp đăng ký an toàn từ DB
- */
-function buildDangKy(dangky, maGoi) {
-  if (!dangky || String(dangky).trim() === '0') {
-    return `Soạn ${maGoi || ''} gửi 191`;
-  }
-  const s = String(dangky).trim();
-  if (/^soạn/i.test(s)) return s;
-  return `Soạn ${s} gửi 191`;
-}
-
-/**
- * Nén 1 gói cước thành đối tượng Minimal JSON
+ * Chuẩn hóa 1 package thành JSON Context sạch cho LLM Pass 2
  */
 function packageToMinimalJson(pkg) {
   if (!pkg) return {};
-  const item = { ma_goi: pkg?.ma_goi || '' };
+  const raw = typeof pkg.toObject === 'function' ? pkg.toObject() : pkg;
 
-  if (pkg?.ten) item.ten = pkg.ten;
-  if (pkg?.gia != null && pkg.gia >= 0) item.gia_text = formatPrice(pkg.gia);
-  if (pkg?.chu_ky_ngay) item.chu_ky_text = formatCycle(pkg.chu_ky_ngay);
+  const minObj = {
+    ma_goi: raw.ma_goi || '',
+    ten: raw.ten || raw.ma_goi || '',
+    gia: raw.gia != null ? `${Number(raw.gia).toLocaleString('vi-VN')}đ` : '0đ',
+    chu_ky: formatCycle(raw.chu_ky_ngay)
+  };
 
-  const rawDataLuotWeb = pkg?.data_luot_web || pkg?.raw_data_theo_ngay || pkg?.data_theo_ngay;
-  if (checkValidValue(rawDataLuotWeb)) {
-    const cleanVal = String(rawDataLuotWeb).replace(/^Data lướt web dùng chung:\s*/i, '').trim();
-    if (checkValidValue(cleanVal)) {
-      item.data_luot_web = cleanVal;
-    }
+  if (isValidVal(raw.data_theo_ngay)) {
+    minObj.uu_dai_data = String(raw.data_theo_ngay).trim();
   }
 
-  const rawDataMxh = pkg?.data_mxh || pkg?.raw_data_meta || pkg?.data_meta;
-  if (checkValidValue(rawDataMxh)) {
-    const cleanMeta = String(rawDataMxh).replace(/^Data ưu tiên Mạng xã hội:\s*/i, '').trim();
-    if (checkValidValue(cleanMeta)) {
-      item.data_mxh = cleanMeta;
-    }
+  const freeNoi = Number(raw.free_noi_mang) || 0;
+  const freeNgoai = Number(raw.free_ngoai_mang) || 0;
+
+  if (freeNoi > 0 || freeNgoai > 0) {
+    const voiceParts = [];
+    if (freeNoi > 0) voiceParts.push(`Nội mạng: ${freeNoi} phút`);
+    if (freeNgoai > 0) voiceParts.push(`Ngoại mạng: ${freeNgoai} phút`);
+    minObj.uu_dai_thoai = voiceParts.join(', ');
   }
 
-  const noiText = pkg?.free_noi_mang_text || (pkg?.free_noi_mang > 0 ? `Miễn phí ${pkg.free_noi_mang} phút` : null);
-  const ngoaiText = pkg?.free_ngoai_mang_text || (pkg?.free_ngoai_mang > 0 ? `Miễn phí ${pkg.free_ngoai_mang} phút` : null);
-
-  if (checkValidValue(noiText)) item.free_noi_mang_text = noiText;
-  if (checkValidValue(ngoaiText)) item.free_ngoai_mang_text = ngoaiText;
-
-  if (checkValidValue(pkg?.tien_ich_free)) {
-    item.tien_ich_free = pkg.tien_ich_free;
+  if (isValidVal(raw.tien_ich_free)) {
+    minObj.uu_dai_mxh = String(raw.tien_ich_free).trim();
+  } else if (isValidVal(raw.uudaitrong)) {
+    minObj.uu_dai_mxh = String(raw.uudaitrong).trim();
   }
 
-  if (pkg?.cu_phap_dk) {
-    item.cu_phap_dk = pkg.cu_phap_dk;
-  } else {
-    item.cu_phap_dk = buildDangKy(pkg?.dangky, pkg?.ma_goi);
+  if (isValidVal(raw.dangky)) {
+    minObj.cu_phap_dang_ky = String(raw.dangky).trim();
   }
 
-  return item;
+  return minObj;
 }
 
 /**
- * Chuyển mảng danh sách gói cước thành chuỗi JSON Minimal
+ * Chuyển danh sách gói cước thành JSON String sạch
  */
 function packagesToXml(packages) {
   if (!packages || !Array.isArray(packages) || packages.length === 0) {
@@ -170,23 +123,23 @@ const buildPrompt = (userMessage, packages, intent = {}, history = []) => {
       '\n\n';
   }
 
-  let intentSummaryText = '';
-  if (intent && intent.user_intent_summary) {
-    intentSummaryText = `Nhu cầu thực sự của khách hàng đã được trích xuất: "${intent.user_intent_summary}"\n`;
-  }
-
   let scenarioGuide = '';
   if (isEmpty) {
-    scenarioGuide = `DỮ LIỆU MONGODB: 0 gói cước khớp chính xác. Hãy phản hồi lịch sự rằng hiện chưa tìm thấy gói cước đáp ứng 100% tiêu chí và hỏi khách hàng có muốn điều chỉnh khoảng giá hoặc thời gian sử dụng không.`;
+    if (intent && intent.target_package) {
+      scenarioGuide = `DỮ LIỆU MONGODB: 0 gói cước. Mã gói "${intent.target_package}" không tồn tại trong CSDL. BẮT BUỘC trả lời: "Dạ, hiện tại Viettel chưa có/không hỗ trợ gói cước ${intent.target_package}. Bạn kiểm tra lại tên gói cước giúp mình nhé!"`;
+    } else {
+      scenarioGuide = `DỮ LIỆU MONGODB: 0 gói cước. BẮT BUỘC trả lời: "Dạ xin lỗi bạn, hiện tại Viettel chưa có gói cước nào khớp chính xác với toàn bộ yêu cầu và ngân sách của bạn. Bạn có thể thay đổi số tiền hoặc nhu cầu để mình kiểm tra lại nhé."`;
+    }
   } else {
-    scenarioGuide = `DỮ LIỆU MONGODB: Có ${packages.length} gói cước được đề xuất bên dưới. Hãy trình bày tự nhiên, hấp dẫn, nêu rõ vì sao gói cước phù hợp với nhu cầu của khách hàng. Tuân thủ định dạng bullet points và hiển thị cú pháp đăng ký chuẩn.`;
+    scenarioGuide = `DỮ LIỆU MONGODB: Có ${packages.length} gói cước (${packages.map(p => p.ma_goi).join(', ')}). BẮT BUỘC tuân thủ các NGUYÊN TẮC THÉP: tư vấn ngắn gọn trực diện, xưng "Chào bạn" hoặc "Dạ", chỉ dùng thông tin gói trong Context, CẤM bịa cú pháp SMS (soạn tin/191) và hướng dẫn khách "Bạn xem chi tiết và bấm đăng ký nhanh ở thông tin ngay bên dưới nhé."`;
   }
 
-  const userPrompt = `${historyContext}${intentSummaryText}CONTEXT (Dữ Liệu Gói Cước Thực Tế Từ MongoDB):
+  const userPrompt = `${historyContext}[Câu hỏi của khách]: "${userMessage}"
+
+[Danh sách gói cước được cung cấp]:
 ${minimalJsonContext}
 
-Hướng dẫn xử lý: ${scenarioGuide}
-Tin nhắn của khách hàng: "${userMessage}"`;
+[Hướng dẫn xử lý]: ${scenarioGuide}`;
 
   return {
     systemInstruction: SYSTEM_PROMPT_RESPONSE_GENERATOR,

@@ -142,7 +142,7 @@ const ChatMessageList = React.memo(function ChatMessageList({
                   ) : part
                 )
               ) : (
-                <div className="bot-msg-markdown space-y-2 text-xs leading-relaxed text-slate-800">
+                <div className="chat-message-content bot-msg-markdown space-y-2 text-xs leading-relaxed text-slate-800">
                   <Markdown
                     remarkPlugins={[remarkGfm]}
                     rehypePlugins={[rehypeSanitize]}

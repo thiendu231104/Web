@@ -10,7 +10,7 @@ const chatbotService = {
     const config = await ChatbotConfig.findOne();
     if (!config) {
       return {
-        systemPrompt: 'Bạn là trợ lý ảo thông minh Viettel AI...',
+        systemPrompt: 'Bạn là Trợ lý tư vấn gói cước Viettel thân thiện, chuyên nghiệp...',
         trainingKeywords: []
       };
     }
@@ -33,18 +33,17 @@ const chatbotService = {
   },
 
   /**
-   * Luồng xử lý Chatbot 2-Pass AI Processing hoàn chỉnh:
-   * BƯỚC 1: Cấu hình Môi trường & AI Provider (groq.provider.js / ai.service.js với llama-3.3-70b-versatile)
-   * BƯỚC 2: intentParser.js (Lượt AI 1 - Trích xuất JSON)
-   * BƯỚC 3: packageMatcher.js (Chuyển JSON thành MongoDB Query & Chấm điểm mềm Soft Scoring chọn 3-5 gói)
-   * BƯỚC 4: promptBuilder.js & AI (Lượt AI 2 - Sinh câu trả lời từ Context XML) & Lưu MongoDB (chat_histories)
+   * Luồng xử lý Pure RAG Architecture Chatbot AI:
+   * BƯỚC 1: intentParser.js (Pass 1 - Trích xuất JSON Intent)
+   * BƯỚC 2: packageMatcher.js (Step 3 - Pure RAG Retrieval Top 3-5 gói cước liên quan nhất)
+   * BƯỚC 3: promptBuilder.js & AI (Pass 2 - Grounded Response Generation) & Lưu ChatHistory
    */
   processMessage: async (message, userId = null, sessionId = null, guestInfo = null) => {
-    console.time('[Chatbot 2-Pass AI] Pipeline Total');
+    console.time('[Chatbot Pure RAG] Pipeline Total');
     try {
-      console.log('[Chatbot 2-Pass AI] Step 1: Receiving user message:', message);
+      console.log('[Chatbot Pure RAG] Step 1: Receiving user message:', message);
 
-      // Lấy lịch sử trò chuyện gần đây (10 câu gần nhất) trước khi lưu tin mới
+      // Lấy lịch sử trò chuyện gần đây (10 câu gần nhất)
       let historyQuery = { isDeleted: { $ne: true } };
       if (userId) {
         historyQuery.userId = userId;
@@ -65,13 +64,13 @@ const chatbotService = {
             sender: h.sender,
             text: h.text
           }));
-          recentHistory.reverse(); // Sắp xếp lại từ cũ đến mới
+          recentHistory.reverse();
         } catch (historyQueryErr) {
           console.error('[Chatbot] Error querying conversation history:', historyQueryErr.message);
         }
       }
 
-      // Lưu tin nhắn của người dùng vào MongoDB collection `chat_histories`
+      // Lưu tin nhắn của người dùng vào MongoDB
       try {
         await ChatHistory.create({
           userId: userId || null,
@@ -85,38 +84,37 @@ const chatbotService = {
         console.error('[Chatbot] Error saving user chat history:', historyErr.message);
       }
 
-      // BƯỚC 2: Lượt AI thứ 1 — Trích xuất JSON Intent từ câu nói người dùng (kèm lịch sử để giữ ngữ cảnh)
-      console.log('[Chatbot 2-Pass AI] Step 2: Pass 1 AI Intent Extraction...');
+      // BƯỚC 1: Pass 1 NLU Intent Extraction
+      console.log('[Chatbot Pure RAG] Step 2: Pass 1 NLU Intent Extraction...');
       const intent = await intentParser(message, recentHistory);
-      console.log('[Chatbot 2-Pass AI] Extracted Intent JSON:', JSON.stringify(intent));
+      console.log('[Chatbot Pure RAG] Extracted Intent JSON:', JSON.stringify(intent));
 
-      // BƯỚC 3: Khớp gói cước trong Database MongoDB bằng Soft Scoring
-      console.log('[Chatbot 2-Pass AI] Step 3: MongoDB Package Soft Scoring & Matching...');
+      // BƯỚC 2: Pure RAG Package Retrieval
+      console.log('[Chatbot Pure RAG] Step 3: Pure RAG Retrieval from MongoDB...');
       let matchedPackages = [];
+
       if (intent.is_general_or_greeting !== true) {
         const matchResult = await matchPackages(intent);
         matchedPackages = matchResult.packages || [];
       }
-      console.log('[Chatbot 2-Pass AI] Matched 3-5 top packages count:', matchedPackages.length, matchedPackages.map(p => p.ma_goi));
+      console.log('[Chatbot Pure RAG] Matched packages count:', matchedPackages.length, matchedPackages.map(p => p.ma_goi));
 
       let replyText = '';
       if (intent.is_general_or_greeting === true) {
-        // Sinh phản hồi chào hỏi/chit-chat hoặc từ chối lạc đề thân thiện
-        console.log('[Chatbot 2-Pass AI] Bypassing packages. Generating greeting/general response...');
-        const systemPrompt = "Bạn là trợ lý ảo Viettel AI, chuyên tư vấn các gói cước di động và dịch vụ viễn thông Viettel. Hãy trả lời câu hỏi của khách hàng một cách thân thiện, lịch sự và tự nhiên. Nếu câu hỏi là lời chào/chit-chat, hãy phản hồi ngắn gọn và hướng người dùng hỏi về gói cước di động Viettel. Nếu câu hỏi lạc đề hoàn toàn khỏi viễn thông Viettel, hãy từ chối khéo léo và nhắc họ rằng bạn chỉ chuyên hỗ trợ các gói cước Viettel.";
+        console.log('[Chatbot Pure RAG] Bypassing packages. Generating greeting response...');
+        const systemPrompt = "Bạn là Trợ lý tư vấn gói cước Viettel thân thiện, chuyên nghiệp. Hãy phản hồi ngắn gọn, lịch sự đối với các câu chào hỏi/tán gẫu và hướng người dùng hỏi về gói cước di động Viettel.";
         const userPrompt = `Lịch sử trò chuyện gần đây:
 ${recentHistory.length > 0 ? recentHistory.map(h => `${h.sender === 'user' ? 'Khách hàng' : 'Trợ lý'}: ${h.text}`).join('\n') : '(Không có)'}
 
 Tin nhắn mới nhất của người dùng: "${message}"`;
         replyText = await generateContent(userPrompt, systemPrompt);
       } else {
-        // BƯỚC 4: Lượt AI thứ 2 — Dựng Context & Sinh câu trả lời hoàn chỉnh từ MongoDB Data
-        console.log('[Chatbot 2-Pass AI] Step 4: Pass 2 AI Prompt Building & Response Generation...');
+        // BƯỚC 3: Pass 2 Response Generation từ Pure Context
+        console.log('[Chatbot Pure RAG] Step 4: Pass 2 Response Generation...');
         const promptObj = buildPrompt(message, matchedPackages, intent, recentHistory);
         replyText = await generateContent(promptObj.userPrompt, promptObj.systemInstruction);
       }
 
-      // Nhận diện suggestedAction nếu AI đề cập tới khảo sát
       let suggestedAction = null;
       if (/khảo\s*sát|survey/i.test(replyText)) {
         suggestedAction = {
@@ -126,7 +124,7 @@ Tin nhắn mới nhất của người dùng: "${message}"`;
         };
       }
 
-      // Lưu câu trả lời của Bot vào MongoDB collection `chat_histories`
+      // Lưu câu trả lời của Bot vào MongoDB
       try {
         await ChatHistory.create({
           userId: userId || null,
@@ -143,7 +141,7 @@ Tin nhắn mới nhất của người dùng: "${message}"`;
         console.error('[Chatbot] Error saving bot chat history:', historyErr.message);
       }
 
-      console.timeEnd('[Chatbot 2-Pass AI] Pipeline Total');
+      console.timeEnd('[Chatbot Pure RAG] Pipeline Total');
 
       return {
         success: true,
@@ -155,26 +153,25 @@ Tin nhắn mới nhất của người dùng: "${message}"`;
       };
 
     } catch (error) {
-      console.timeEnd('[Chatbot 2-Pass AI] Pipeline Total');
-      console.error('[Chatbot 2-Pass AI] Pipeline Error:', error);
+      console.timeEnd('[Chatbot Pure RAG] Pipeline Total');
+      console.error('[Chatbot Pure RAG] Pipeline Error:', error);
       return {
         success: false,
         text: 'Dạ, hiện tại hệ thống chatbot đang gặp sự cố kết nối. Vui lòng thử lại sau ít phút.',
-        message: 'Dạ, hiện tại hệ thống chatbot đang gặp sự cố kết nối. Vui lòng thử lại sau ít phút.',
+        message: 'Dạ, hiện tại hệ thống chatbot đang gặp sự cố kết lộ. Vui lòng thử lại sau ít phút.',
         packages: [],
         recommendedPackages: []
       };
     }
   },
 
-  // Helper auto seed
   checkAndSeedChatbot: async () => {
     const count = await ChatbotConfig.countDocuments();
     if (count > 0) return;
 
     console.log('Seeding default Chatbot Configuration...');
     await ChatbotConfig.create({
-      systemPrompt: 'Bạn là trợ lý ảo thông minh Viettel AI, chuyên tư vấn các gói cước di động phù hợp nhất với nhu cầu sử dụng mạng, cuộc gọi và mạng xã hội của khách hàng. Hãy trả lời thân thiện, ngắn gọn và cung cấp nút đăng ký nhanh cho người dùng.',
+      systemPrompt: 'Bạn là Trợ lý tư vấn gói cước Viettel thân thiện, chuyên nghiệp...',
       trainingKeywords: []
     });
     console.log('Successfully seeded Chatbot Configuration.');
