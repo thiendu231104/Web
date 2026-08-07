@@ -109,10 +109,8 @@ ${recentHistory.length > 0 ? recentHistory.map(h => `${h.sender === 'user' ? 'Kh
 
 Tin nhắn mới nhất của người dùng: "${message}"`;
         replyText = await generateContent(userPrompt, systemPrompt);
-      } else if (matchedPackages.length === 0) {
-        replyText = 'Rất tiếc, hiện tại hệ thống Viettel không có gói cước nào đáp ứng chính xác nhu cầu của bạn. Xin vui lòng kiểm tra lại thông tin hoặc thay đổi tiêu chí tìm kiếm nhé!';
       } else {
-        // BƯỚC 4: Lượt AI thứ 2 — Dựng Context & Sinh câu trả lời hoàn chỉnh
+        // BƯỚC 4: Lượt AI thứ 2 — Dựng Context & Sinh câu trả lời hoàn chỉnh từ MongoDB Data
         console.log('[Chatbot 2-Pass AI] Step 4: Pass 2 AI Prompt Building & Response Generation...');
         const promptObj = buildPrompt(message, matchedPackages, intent, recentHistory);
         replyText = await generateContent(promptObj.userPrompt, promptObj.systemInstruction);

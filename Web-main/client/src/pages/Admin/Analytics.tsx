@@ -1,15 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  BarChart3, RefreshCw, TrendingUp, CreditCard, Wifi, MessageSquare,
+  BarChart3, RefreshCw, Wifi, MessageSquare,
   Search, PieChart as PieChartIcon, Activity, AlertTriangle, Loader2,
-  FileSpreadsheet, Coins, Zap, ShieldCheck, Clock, ArrowRight, UserCheck,
-  CheckCircle2, ArrowUpRight, Calendar, Filter, Eye, Compass, GitMerge,
-  Layers, ChevronRight, X, Scale, ClipboardList, CheckCircle, XCircle,
-  Users, User, Target, Sparkles, ArrowDownRight, ChevronDown, FileText, Printer
+  FileSpreadsheet, Coins, Zap, ShieldCheck, Clock, Calendar, Eye,
+  Layers, Scale, ClipboardList, XCircle, Users, User, Target, ChevronDown, Printer
 } from 'lucide-react';
 import {
-  ComposedChart, Area, Line, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList
+  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
 import * as XLSX from 'xlsx';
 import axiosInstance from '../../services/axiosInstance';

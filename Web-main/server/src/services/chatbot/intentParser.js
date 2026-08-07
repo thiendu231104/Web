@@ -1,73 +1,69 @@
 /**
- * intentParser.js — Pass 1 AI Semantic Intent Extractor (Best-Fit Recommendation)
+ * intentParser.js — Pass 1 LLM Natural Language Understanding (NLU) & Structured Requirements Extractor
  *
- * GIAI ĐOẠN 1: Bóc tách ngữ nghĩa linh hoạt tại Pass 1 AI
- * Trích xuất ra đối tượng JSON với cấu trúc chuẩn:
- * - target_package: Mã gói cước nếu nhắc đích danh (như "ST30K", "SD90"). Null nếu không có.
- * - budget_exact: Số tiền chính xác user có (như "50k" -> 50000, "gói 0đ" -> 0). Null nếu không có.
- * - budget_max: Số tiền tối đa (như "dưới 100k" -> 100000, "gói miễn phí" -> 0). Null nếu không có.
- * - budget_min: Số tiền tối thiểu. Null nếu không có.
- * - duration_min: Số ngày tối thiểu (như "từ 3 ngày" -> 3). Null nếu không có.
- * - duration_max: Số ngày tối đa (như "đến 7 ngày" -> 7). Null nếu không có.
- * - apps: Mảng tên ứng dụng cụ thể (viết HOA). Nếu nhắc "mạng xã hội" kèm app cụ thể, chỉ lấy app cụ thể.
- * - app_match_type: MẶC ĐỊNH LUÔN LÀ "OR". Chỉ gán "AND" khi có từ nhấn mạnh "bắt buộc phải có cả", "yêu cầu có đủ cả".
- * - is_data_only: Boolean (true nếu hỏi gói thuần data).
- * - is_combo: Boolean (true nếu hỏi gói combo nghe gọi + data).
+ * Chức năng:
+ * - Phân tích ngữ nghĩa câu nói tự nhiên của người dùng (kèm lịch sử hội thoại).
+ * - Trích xuất Nhu cầu có Cấu trúc (Structured Requirements) dạng JSON.
+ * - Chuẩn hóa data_type & cycle_preference tự động cho mọi câu thoại tự nhiên.
  */
 
 const { generateContent } = require('../ai/ai.service');
 
 const VALID_ALLOWED_APPS = ['FACEBOOK', 'TIKTOK', 'YOUTUBE', 'TV360', 'MESSENGER', 'INSTAGRAM'];
 
-const INTENT_PARSER_SYSTEM_PROMPT = `Bạn là Chuyên gia bóc tách ngữ nghĩa nhu cầu viễn thông Viettel.
-Nhiệm vụ của bạn là đọc câu nói của người dùng và trích xuất ra CHÍNH XÁC MỘT CHUỖI JSON (không kèm bất kỳ văn bản hay ký tự Markdown nào khác).
+const INTENT_PARSER_SYSTEM_PROMPT = `Bạn là Chuyên gia thấu hiểu và phân tích ngữ nghĩa nhu cầu viễn thông Viettel.
+Nhiệm vụ của bạn là đọc câu nói tự nhiên của người dùng (kèm lịch sử trò chuyện nếu có) và trích xuất cấu trúc dữ liệu nhu cầu (Structured Requirements) dưới dạng DUY NHẤT 1 chuỗi JSON (không chứa bất kỳ markdown hay văn bản nào khác).
 
 JSON Schema bắt buộc:
 {
-  "target_package": "Tên mã gói nếu có (vd: ST30K, SD90...). Đặt null nếu không nhắc tới",
-  "budget_exact": Số tiền chính xác dạng số VNĐ (vd: "có 50k" -> 50000, "gói 100k" -> 100000, "gói 0đ" / "0 đồng" -> 0). Đặt null nếu dùng từ so sánh "dưới", "trên", "từ...đến",
-  "budget_max": Số tiền tối đa dạng số VNĐ (vd: "dưới 100k" -> 100000, "gói miễn phí" / "0đ" -> 0). Đặt null nếu không có,
+  "target_package": "Tên mã gói cước nếu người dùng nhắc đích danh (ví dụ: SD90, ST30K, V120B, MXH100...). Đặt null nếu không nhắc mã gói nào",
+  "budget_exact": Số tiền chính xác dạng số VNĐ nếu người dùng đưa mốc cố định (vd: "50k" -> 50000, "0đ" / "miễn phí" -> 0). Đặt null nếu không có số chính xác,
+  "budget_max": Số tiền tối đa dạng số VNĐ (vd: "dưới 100k" -> 100000, "tầm 150k trở xuống" -> 150000). Đặt null nếu không có,
   "budget_min": Số tiền tối thiểu dạng số VNĐ (vd: "trên 50k" -> 50000). Đặt null nếu không có,
-  "duration_min": Số ngày tối thiểu dạng số (vd: "từ 3 ngày" -> 3, "gói 7 ngày" -> 7). Đặt null nếu không có,
-  "duration_max": Số ngày tối đa dạng số (vd: "đến 7 ngày" -> 7, "từ 3 đến 7 ngày" -> 7). Đặt null nếu không có,
-  "apps": ["Mảng các tên ứng dụng cụ thể viết HOA CHỈ THUỘC DANH SÁCH: FACEBOOK, TIKTOK, YOUTUBE, TV360, MESSENGER, INSTAGRAM. TUYỆT ĐỐI KHÔNG đưa các từ như 'LƯỚT WEB', 'DATA', 'INTERNET', 'HOTSPOT' vào mảng này. Đặt [] nếu không nhắc ứng dụng cụ thể nào"],
-  "app_match_type": "AND" hoặc "OR" (MẶC ĐỊNH LUÔN LÀ "OR" để tìm linh hoạt. CHỈ gán "AND" khi người dùng dùng các từ khóa nhấn mạnh tính bắt buộc đồng thời như: "bắt buộc phải có cả", "yêu cầu có đủ cả"),
-  "is_data_only": true/false (true nếu người dùng hỏi gói thuần data/internet),
-  "is_combo": true/false (CHỈ BẰNG true KHI VÀ CHỈ KHI người dùng TRỰC TIẾP NHẮC ĐẾN GỌI ĐIỆN / PHÚT GỌI như "gọi nội mạng", "gọi ngoại mạng", "phút gọi", "combo gọi data"),
-  "is_general_or_greeting": true/false (true nếu người dùng chỉ chào hỏi, cảm ơn, tạm biệt, tán gẫu hoặc hỏi các câu hỏi chung chung/lạc đề không liên quan đến gói cước viễn thông Viettel)
+  "price_preference": "cheapest" (nếu thể hiện mong muốn rẻ nhất/tiết kiệm nhất) | "best_value" (nếu hỏi gói hời/đáng tiền nhất) | null,
+  "data_type": "general" (nếu khách cần data lướt web, học tập, truy cập mạng chung/tổng hợp/dùng chung) | "app_specific" (nếu khách chỉ cần data cho 1 ứng dụng cụ thể như xem TikTok, chơi game, xem phim, TV360) | "any" (nếu không chỉ rõ),
+  "duration_days": Số ngày sử dụng dự kiến dạng số (vd: "1 ngày" / "24h" / "trong ngày" -> 1, "3 ngày" -> 3, "2 tuần" -> 14, "1 tháng" -> 30, "3 tháng" -> 90, "1 năm" -> 360). Đặt null nếu người dùng chỉ nói chung chung như "chu kỳ dài", "dùng lâu dài" hoặc không nói rõ số ngày cụ thể,
+  "cycle_preference": "short" (dùng ngắn hạn: theo ngày/tuần, <= 15 ngày) | "monthly" (theo tháng, ~30 ngày) | "long_term" (lâu dài/dài hạn/chu kỳ dài: nhiều tháng/năm, >= 90 ngày) | null,
+  "apps": ["Mảng các ứng dụng cụ thể viết HOA thuộc danh sách: FACEBOOK, TIKTOK, YOUTUBE, TV360, MESSENGER, INSTAGRAM. Đặt [] nếu không nhắc ứng dụng nào"],
+  "app_match_type": "OR" (mặc định) hoặc "AND" (chỉ khi có từ bắt buộc có đủ cả),
+  "data_volume_preference": "high" (nếu dùng nhiều mạng/xem video nhiều: "mạng nhiều", "data khủng", "xem TikTok nhiều", "dung lượng cao", "thoải mái") | "medium" | "low" | null,
+  "is_data_only": true/false (true nếu người dùng chỉ cần data/mạng/lướt web, không cần phút gọi điện),
+  "is_combo": true/false (true nếu người dùng nhắc tới hoặc có nhu cầu gọi điện, phút gọi, gọi nội/ngoại mạng, combo),
+  "is_general_or_greeting": true/false (true nếu người dùng chỉ chào hỏi, cảm ơn, tạm biệt, tán gẫu hoặc hỏi các vấn đề không liên quan đến gói cước viễn thông Viettel),
+  "user_intent_summary": "Tóm tắt ngắn gọn 1 câu về nhu cầu thực sự của khách hàng"
 }
 
-QUY TẮC BẮT BUỘC PHÂN BIỆT DATA/NGÀY VỚI CHU KỲ GÓI CƯỚC (DURATION):
-- Các cụm từ chỉ định mức Data theo ngày như "8GB/ngày", "2GB/ngày", "1.5GB/ngày", "mỗi ngày 2GB", "mỗi ngày 8GB", "tốc độ cao/ngày" CHỈ LÀ thông số ưu đãi Data, KHÔNG ĐƯỢC dùng để gán duration_min: 1 hoặc duration_max: 1.
-- Cờ duration CHỈ ĐƯỢC XÁC ĐỊNH dựa vào chu kỳ tổng được nhắc tới trong câu:
-  * Nếu có từ "tháng", "/tháng", "30 ngày" -> duration_min: 30, duration_max: 30.
-  * Nếu có từ "năm", "12 tháng", "360 ngày" -> duration_min: 360, duration_max: 360.
-  * Nếu có từ "gói ngày", "1 ngày", "trong ngày", "dùng 1 ngày" -> duration_min: 1, duration_max: 1.
+QUY TẮC PHÂN TÍCH NGÔN NGỮ TỰ NHIÊN (NLU):
+1. Quy tắc Chu kỳ dài & Dùng lâu dài:
+   - Khi khách nói "chu kỳ dài", "dùng lâu dài", "dài hạn" mà KHÔNG có số ngày cụ thể: BẮT BUỘC ĐẶT "cycle_preference": "long_term" và "duration_days": null (TUYỆT ĐỐI KHÔNG ép cứng duration_days = 30).
+2. Quy tắc Phân loại Data Type:
+   - "general": Khách cần data lướt web, học tập, truy cập mạng chung (vd: "truy cập mạng", "lướt web", "data dùng chung", "dùng mạng").
+   - "app_specific": Khách chỉ cần data cho 1 ứng dụng cụ thể (vd: "chơi game", "xem phim", "tiktok", "youtube").
+   - "any": Không chỉ rõ.
+3. Thấu hiểu ý định gián tiếp & tự nhiên:
+   - "Tôi cần mạng nhiều để xem TikTok, dùng khoảng 2 tuần" -> apps: ["TIKTOK"], data_type: "app_specific", data_volume_preference: "high", duration_days: 14, cycle_preference: "short", is_data_only: true
+   - "Có gói nào rẻ mà đủ dùng cho người hay xem YouTube không?" -> apps: ["YOUTUBE"], data_type: "app_specific", price_preference: "cheapest", is_data_only: true
+   - "Tôi cần gói lâu dài, càng tiết kiệm càng tốt" -> cycle_preference: "long_term", duration_days: null, price_preference: "cheapest", data_type: "general"
+   - "Tôi chỉ cần data lướt web, không quan tâm gọi thoại" -> data_type: "general", is_data_only: true, is_combo: false
 
-QUY TẮC QUY ĐỔI MỐC THỜI GIAN "24H":
-- Các cụm từ "24h", "đến 24h", "24 giờ", "trong ngày", "1 ngày", "theo ngày" BẮT BUỘC quy đổi thành duration_min: 1 và duration_max: 1 (Đơn vị tính là NGÀY, TUYỆT ĐỐI KHÔNG lấy số 24).
-- CHỈ gán duration lớn hơn 1 khi người dùng nói rõ số NGÀY (VD: "3 ngày" -> duration: 3, "7 ngày" -> duration: 7, "30 ngày" -> duration: 30).
-
-QUY TẮC PHÂN BIỆT IS_COMBO VÀ APPS:
-- "is_combo": CHỈ gán true khi người dùng có nhu cầu GỌI ĐIỆN/PHÚT GỌI. Nếu người dùng chỉ cần Data + Tiện ích ứng dụng (như TV360, TikTok, YouTube, Facebook...): BẮT BUỘC đặt is_combo: false và đưa ứng dụng vào mảng apps (vd: apps: ["TV360"]).
-- Mảng "apps" CHỈ ĐƯỢC CHỨA các ứng dụng cụ thể (FACEBOOK, TIKTOK, YOUTUBE, TV360, MESSENGER, INSTAGRAM).
-- Các từ "lướt web", "data lướt web", "dung lượng", "hotspot", "truy cập mạng" KHÔNG PHẢI tên ứng dụng -> ĐẶT apps: [].
-- Nếu người dùng hỏi các câu như "có gói 0đ không", "gói miễn phí", "0 đồng", "free cước"... -> BẮT BUỘC trích xuất budget_exact: 0 HOẶC budget_max: 0.
-
-CẢNH BÁO: CHỈ TRẢ VỀ DUY NHẤT CHUỖI JSON CÓ ĐÚNG CÁC TRƯỜNG TRÊN.`;
+CẢNH BÁO: CHỈ TRẢ VỀ DUY NHẤT 1 CHUỖI JSON HỢP LỆ. KHÔNG BAO GỒM VĂN BẢN KHÁC.`;
 
 const DEFAULT_INTENT = {
   target_package: null,
   budget_exact: null,
   budget_max: null,
   budget_min: null,
-  duration_min: null,
-  duration_max: null,
+  price_preference: null,
+  data_type: 'any',
+  duration_days: null,
+  cycle_preference: null,
   apps: [],
   app_match_type: 'OR',
+  data_volume_preference: null,
   is_data_only: false,
   is_combo: false,
-  is_general_or_greeting: false
+  is_general_or_greeting: false,
+  user_intent_summary: ''
 };
 
 /**
@@ -87,13 +83,13 @@ function cleanAndParseJSON(rawText) {
   try {
     return JSON.parse(cleaned);
   } catch (err) {
-    console.error('[intentParser] Error parsing JSON from Pass 1 AI:', err.message);
+    console.error('[intentParser] Error parsing JSON from NLU Pass 1 AI:', err.message);
     return null;
   }
 }
 
 /**
- * Hàm parse intent Pass 1 AI
+ * Main NLU Intent Extraction function
  */
 const parseIntent = async (userMessage, history = []) => {
   if (!userMessage || typeof userMessage !== 'string' || !userMessage.trim()) {
@@ -103,16 +99,18 @@ const parseIntent = async (userMessage, history = []) => {
   try {
     let historyContext = '';
     if (history && history.length > 0) {
-      historyContext = 'Lịch sử trò chuyện gần đây:\n' + history.map(h => `${h.sender === 'user' ? 'Khách hàng' : 'Trợ lý'}: ${h.text}`).join('\n') + '\n\n';
+      historyContext = 'Lịch sử trò chuyện gần đây:\n' + 
+        history.map(h => `${h.sender === 'user' ? 'Khách hàng' : 'Trợ lý'}: ${h.text}`).join('\n') + 
+        '\n\n';
     }
 
-    const userPrompt = `${historyContext}Tin nhắn mới nhất của người dùng cần phân tích: "${userMessage.trim()}"`;
+    const userPrompt = `${historyContext}Tin nhắn mới nhất của người dùng cần phân tích NLU: "${userMessage.trim()}"`;
 
     const rawAiOutput = await generateContent(userPrompt, INTENT_PARSER_SYSTEM_PROMPT);
     const parsed = cleanAndParseJSON(rawAiOutput);
 
     if (!parsed || typeof parsed !== 'object') {
-      console.warn('[intentParser] Fallback default intent due to invalid JSON return');
+      console.warn('[intentParser] Fallback default intent due to invalid JSON return from NLU');
       return { ...DEFAULT_INTENT, user_query: userMessage };
     }
 
@@ -125,69 +123,41 @@ const parseIntent = async (userMessage, history = []) => {
           .filter(app => VALID_ALLOWED_APPS.includes(app))
       : [];
 
-    // CHỈ CHO PHÉP is_combo = true KHI CÓ TỪ KHÓA GỌI / PHÚT GỌI THỰC SỰ
-    const hasCallingKeyword = /gọi|goi|phút|phut|nói chuyện|noi chuyen|nghe gọi|nghe goi/i.test(userMessage);
-    const finalIsCombo = Boolean(parsed.is_combo) && hasCallingKeyword;
+    const targetPkgClean = (rawPkg && rawPkg.toLowerCase() !== 'null' && rawPkg !== '') ? rawPkg.toUpperCase() : null;
 
-    // QUY ĐỔI MỐC THỜI GIAN "24H" THÀNH 1 NGÀY VÀ PHÂN BIỆT VỚI DATA/NGÀY
-    let durMin = typeof parsed.duration_min === 'number' && !isNaN(parsed.duration_min) ? parsed.duration_min : null;
-    let durMax = typeof parsed.duration_max === 'number' && !isNaN(parsed.duration_max) ? parsed.duration_max : null;
+    // Safety type coercion for numbers
+    const numOrNull = (val) => (typeof val === 'number' && !isNaN(val)) ? val : null;
 
-    const isMonthlyQuery = /tháng|\/tháng|thang|30\s*ngày|30\s*ngay/i.test(userMessage);
-    const isDailyDataRate = /\d+(?:\.\d+)?\s*gb\s*\/\s*ngày|\d+(?:\.\d+)?\s*gb\s*\/\s*ngay|mỗi\s*ngày\s*\d+|moi\s*ngay\s*\d+/i.test(userMessage);
-    const isExplicitDayPackage = /gói\s*ngày|goi\s*ngay|1\s*ngày|1\s*ngay|đến\s*24h|trong\s*ngày/i.test(userMessage);
+    const dataTypeClean = ['general', 'app_specific', 'any'].includes(parsed.data_type) ? parsed.data_type : 'any';
 
-    if (isMonthlyQuery) {
-      durMin = 30;
-      durMax = 30;
-    } else if (isDailyDataRate && !isExplicitDayPackage && (durMin === 1 || durMax === 1)) {
-      durMin = null;
-      durMax = null;
-    }
-
-    const is24hQuery = /24h|24\s*giờ|24\s*gio|đến\s*24h|trong\s*ngày|trong\s*ngay|1\s*ngày|1\s*ngay|theo\s*ngày/i.test(userMessage);
-    if (!isMonthlyQuery && (is24hQuery || durMin === 24 || durMax === 24)) {
-      durMin = 1;
-      durMax = 1;
-    }
-
-    const hasGreetingKeyword = /^(hi|hello|helo|chào|chao|xin chào|xin chao|alo|ê|e|hello bạn|chào bạn|hi bạn|chào ad|ad ơi)$/i.test(userMessage.trim());
-    let finalIsGeneralOrGreeting = Boolean(parsed.is_general_or_greeting) || hasGreetingKeyword;
-
-    const parsedBudgetExact = typeof parsed.budget_exact === 'number' && !isNaN(parsed.budget_exact) ? parsed.budget_exact : null;
-    const parsedBudgetMax = typeof parsed.budget_max === 'number' && !isNaN(parsed.budget_max) ? parsed.budget_max : null;
-    const parsedBudgetMin = typeof parsed.budget_min === 'number' && !isNaN(parsed.budget_min) ? parsed.budget_min : null;
-
-    if (
-      (rawPkg && rawPkg.toLowerCase() !== 'null') ||
-      parsedBudgetExact !== null ||
-      parsedBudgetMax !== null ||
-      parsedBudgetMin !== null ||
-      durMin !== null ||
-      durMax !== null ||
-      sanitizedApps.length > 0 ||
-      finalIsCombo
-    ) {
-      finalIsGeneralOrGreeting = false;
+    // Đảm bảo khi "cycle_preference" là "long_term" mà không có số ngày cụ thể thì duration_days = null
+    let finalDurationDays = numOrNull(parsed.duration_days);
+    const finalCyclePreference = ['short', 'monthly', 'long_term'].includes(parsed.cycle_preference) ? parsed.cycle_preference : null;
+    if (finalCyclePreference === 'long_term' && parsed.duration_days == null) {
+      finalDurationDays = null;
     }
 
     return {
       user_query: userMessage,
-      target_package: (rawPkg && rawPkg.toLowerCase() !== 'null') ? rawPkg.toUpperCase() : null,
-      budget_exact: parsedBudgetExact,
-      budget_max: parsedBudgetMax,
-      budget_min: parsedBudgetMin,
-      duration_min: durMin,
-      duration_max: durMax,
+      target_package: targetPkgClean,
+      budget_exact: numOrNull(parsed.budget_exact),
+      budget_max: numOrNull(parsed.budget_max),
+      budget_min: numOrNull(parsed.budget_min),
+      price_preference: ['cheapest', 'best_value'].includes(parsed.price_preference) ? parsed.price_preference : null,
+      data_type: dataTypeClean,
+      duration_days: finalDurationDays,
+      cycle_preference: finalCyclePreference,
       apps: sanitizedApps,
       app_match_type: (rawMatchType === 'AND') ? 'AND' : 'OR',
+      data_volume_preference: ['high', 'medium', 'low'].includes(parsed.data_volume_preference) ? parsed.data_volume_preference : null,
       is_data_only: Boolean(parsed.is_data_only),
-      is_combo: finalIsCombo,
-      is_general_or_greeting: finalIsGeneralOrGreeting
+      is_combo: Boolean(parsed.is_combo),
+      is_general_or_greeting: Boolean(parsed.is_general_or_greeting),
+      user_intent_summary: typeof parsed.user_intent_summary === 'string' ? parsed.user_intent_summary : ''
     };
 
   } catch (error) {
-    console.error('[intentParser] Pass 1 AI execution error:', error.message);
+    console.error('[intentParser] Pass 1 NLU execution error:', error.message);
     return { ...DEFAULT_INTENT, user_query: userMessage };
   }
 };

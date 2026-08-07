@@ -14,7 +14,7 @@ const makeGroqRequest = (prompt, systemInstruction = null, timeoutMs = 15000, ov
     }
 
     const apiKey = process.env.GROQ_API_KEY;
-    const model = overrideModel || process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+    const model = overrideModel || process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
     if (!apiKey) {
       return reject(new Error("Missing GROQ_API_KEY in environment variables"));

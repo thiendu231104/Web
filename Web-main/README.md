@@ -1,15 +1,11 @@
 # Website Cung Cấp Gói Cước Di Động Viettel Tích Hợp Chatbot AI
 
-> 📢 **BẢN TUYÊN BỐ NGUỒN SỰ THẬT DUY NHẤT (SINGLE SOURCE OF TRUTH - SSOT):**
-> Tài liệu này được tổng hợp và đối chiếu trực tiếp từ **Source Code hiện tại** và **CSDL MongoDB thực tế đang chạy**. Mọi trường dữ liệu (fields), tên collection, cấu hình môi trường và tính năng nghiệp vụ đều tuân thủ chính xác 100% theo thực tế hệ thống.
-
----
-
-## A. Cấu Hình Hệ Thống (Configuration)
+A. Cấu Hình Hệ Thống (Configuration)
 
 Hệ thống được cấu hình và vận hành dựa trên các biến môi trường và tệp cấu hình thực tế sau:
 
 ### 1. File Cấu Hình Dự Án
+
 - **Root (`package.json`)**: Quản lý npm workspace liên kết giữa hai gói `client` và `server`.
 - **Frontend Client (`client/`)**:
   - `package.json`: Khai báo các thư viện chính gồm React 18, Vite, Tailwind CSS, Lucide React, Zustand, React Hook Form, Zod, Ethers.js.
@@ -24,6 +20,7 @@ Hệ thống được cấu hình và vận hành dựa trên các biến môi t
 ### 2. Các Biến Môi Trường Thực Tế (Environment Variables)
 
 #### 🔹 Cấu hình Backend (`server/.env`)
+
 - `MONGODB_URI`: Chuỗi URI kết nối tới CSDL MongoDB (Mongo Atlas Cluster).
 - `PORT`: Cổng dịch vụ HTTP Server Express (`5000`).
 - `JWT_SECRET`: Chuỗi khóa mật băm và xác thực JSON Web Token.
@@ -36,6 +33,7 @@ Hệ thống được cấu hình và vận hành dựa trên các biến môi t
 - `MAIL_HOST`, `MAIL_PORT`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`: Cấu hình SMTP Server (Mailtrap) phục vụ gửi email chứa mã OTP khôi phục mật khẩu.
 
 #### 🔹 Cấu hình Frontend (`client/.env`)
+
 - `VITE_API_URL`: URL Backend REST API Client kết nối (`http://localhost:5000`).
 - `VITE_NETWORK_NAME`: Tên mạng thử nghiệm Blockchain (`Sepolia`).
 - `VITE_CHAIN_ID`: Chain ID của mạng Sepolia (`11155111`).
@@ -51,17 +49,20 @@ Hệ thống được cấu hình và vận hành dựa trên các biến môi t
 Tất cả các chức năng dưới đây đều được xác minh trực tiếp từ mã nguồn thực tế và kết nối CSDL MongoDB:
 
 ### 1. Xác Thực & Phân Quyền Tài Khoản (Authentication & Authorization)
+
 - **Đăng ký & Đăng nhập**: Xác thực số điện thoại và mật khẩu mã hóa bcrypt. Cấp JWT Token lưu tại `localStorage`.
 - **Khôi phục mật khẩu qua Email OTP**: Tạo mã OTP 6 số ngẫu nhiên gửi qua SMTP Email, lưu trữ tại collection `otp_codes` có cơ chế tự hủy TTL Index sau 300 giây.
 - **Phân quyền vai trò (Role-Based Access Control)**: Phân chia 2 quyền chính `user` (người dùng thuê bao) và `admin` (quản trị viên hệ thống).
 - **Session Merge trên Login**: Khi Guest đăng nhập tài khoản, hệ thống tự động đồng bộ tất cả lịch sử hoạt động `user_activities` từ `session_id` sang `user_id`.
 
 ### 2. Duyệt, Tìm Kiếm & Lọc Gói Cước Nâng Cao
+
 - **Tìm kiếm Từ khóa Debounced**: Tìm kiếm theo mã gói, tên gói, ưu đãi data với cơ chế hoãn phát tín hiệu (debounce 400ms).
 - **Bộ lọc đa tiêu chí (AdvancedFilter)**: Lọc theo phân loại (`Data`, `Combo`), mức giá, chu kỳ sử dụng (1 ngày, 7 ngày, 30 ngày, 90 ngày, 360 ngày) và đối tượng thuê bao (`trả trước`, `trả sau`).
 - **Personalized Recently Viewed (Gói cước quan tâm gần đây)**: API `/api/packages/recently-viewed` tự động lọc danh sách gói cước vừa tìm kiếm/xem chi tiết độc nhất của người dùng/khách vãng lai hiển thị tại Trang Chủ.
 
 ### 3. Kiểm Tra Xung Đột & Đăng Ký Gói Cước (Subscription Conflict Engine)
+
 - **Thuật toán kiểm tra xung đột 5 bước**:
   1. *Kiểm tra gói trùng*: Trùng gói ngắn hạn $\rightarrow$ cho phép gia hạn (`RENEW_SHORT`), trùng gói dài hạn đang hoạt động $\rightarrow$ từ chối đăng ký (`REJECT`).
   2. *Gói nền bắt buộc (`requires_base_package`)*: Từ chối nếu gói yêu cầu gói nền mà thuê bao chưa có gói `DATA_BASE` hoặc `COMBO` hoạt động.
@@ -71,6 +72,7 @@ Tất cả các chức năng dưới đây đều được xác minh trực ti�
 - **Dev Virtual Time Tua Thời Gian**: Tool tua mốc thời gian ảo kiểm tra tự động gia hạn (`autoRenew`) và chuyển trạng thái gói cước `EXPIRED`.
 
 ### 4. Gộp Nhật Ký Hoạt Động Theo Phiên (Session-Scoped Activity Aggregation)
+
 - **Helper `logOrMergeActivity`**: Thuật toán gộp log theo phiên trong `user_activities`: mỗi gói cước chỉ tồn tại tối đa 1 bản ghi duy nhất trong cùng 1 phiên (`user_id` hoặc `session_id`).
 - **Tiến hóa trạng thái luồng (`flow_type`)**:
   - `SEARCH_VIEW`: Tìm kiếm $\rightarrow$ xem chi tiết.
@@ -82,30 +84,36 @@ Tất cả các chức năng dưới đây đều được xác minh trực ti�
 - **Frontend Guest Session Reset**: `guest_session_id` được lưu độc quyền tại `sessionStorage` và tự động sinh mới mỗi khi F5 reload trang.
 
 ### 5. So Sánh Gói Cước & AI Summarization
+
 - **Khay So Sánh Tạm (CompareDrawer)**: Cho phép chọn từ 2 đến 3 gói cước đưa vào so sánh đối chiếu.
 - **Bảng So Sánh Chi Tiết (Compare.tsx)**: So sánh dung lượng data, giá cước, số phút gọi nội/ngoại mạng, cú pháp SMS và tiện ích đi kèm.
 - **Phân tích so sánh AI (CompareAI.tsx)**: Gọi mô hình AI Groq/Gemini sinh câu đánh giá tư vấn ưu/nhược điểm ngắn gọn giữa các gói cước đang so sánh.
 - **Lưu phiên so sánh (`compare_histories`)**: Lưu vết quá trình so sánh, thời gian so sánh và lựa chọn cuối cùng.
 
 ### 6. Nạp Tiền Ví Di Động Qua MetaMask Blockchain (Web3 Sepolia)
+
 - **Tích hợp Ethers.js Web3**: Kết nối ví MetaMask trên trình duyệt, ký giao dịch chuyển tiền ETH Sepolia tới địa chỉ ví `RECEIVER_WALLET`.
 - **Tự động quy đổi VND/ETH**: Quy đổi giá trị VND sang ETH theo tỷ giá `ETH_EXCHANGE_RATE`.
 - **Lưu lịch sử nạp tiền (`deposits`)**: Ghi nhận mã `txHash`, số tiền `amountVND`, `amountETH`, trạng thái `status: 'success'` và tự động cộng số dư vào `Account.balance`.
 
 ### 7. AI Chatbot Tư Vấn & Thuật Toán RAG Matcher
+
 - **Cửa sổ Chatbot Bong bóng & Trang Chat riêng**: Giao diện hội thoại tương tác với trợ lý AI Viettel.
 - **Thuật toán RAG Hybrid Matching**: Kết hợp khớp từ khóa nhu cầu (`trainingKeywords`), bài học kinh nghiệm (`learnedLessons`) và ma trận tính điểm `scoring_config.json` với dữ liệu đặc trưng gói `package_features`.
 - **Lưu trữ lịch sử hội thoại (`chat_histories`)**: Hỗ trợ xóa lịch sử hội thoại dạng soft-delete.
 
 ### 8. Khảo Sát Đề Xuất Gói Cước Decision Tree (Survey)
+
 - **Wizard Khảo Sát Động (`Survey.tsx`)**: Lần lượt trả lời các câu hỏi nhu cầu chính, ngân sách, chu kỳ và ứng dụng yêu thích tải từ `survey_configs`.
 - **Trả về đề xuất phù hợp**: Thuật toán khớp đáp án lọc và trả về danh sách gói cước tối ưu lưu tại `survey_histories`.
 
 ### 9. Quản Lý Yêu Cầu Liên Hệ CSKH (Contact)
+
 - **Gửi Yêu Cầu CSKH (`Contact.tsx`)**: Người dùng và Guest gửi thắc mắc/sự cố theo chủ đề.
 - **Phản hồi chính thức từ Admin**: Admin nhập `admin_note` và đánh dấu `status: 'DONE'`. Người dùng theo dõi phản hồi trong Tab Lịch sử liên hệ.
 
 ### 10. Trang Quản Trị Quản Lý (Admin Panel)
+
 - **Dashboard.tsx**: Thống kê tổng quan số dư, doanh thu, số gói cước, số thuê bao và lượt tương tác.
 - **Packages.tsx**: Quản lý CRUD danh mục gói cước, hỗ trợ thanh tìm kiếm cục bộ tối giản và modal chỉnh sửa 3 tab.
 - **Users.tsx**: Quản lý danh sách tài khoản thuê bao, cộng tiền số dư thủ công và khóa/mở khóa tài khoản.
@@ -121,6 +129,7 @@ Tất cả các chức năng dưới đây đều được xác minh trực ti�
 Hệ thống được thiết kế theo phong cách hiện đại (Vibrant Dark/Light Mode, Tailwind CSS, Lucide Icons) bao gồm các trang và component hiển thị thực tế:
 
 ### 1. Danh Sách Màn Hình Thực Tế (Pages)
+
 - **Trang chủ (`client/src/pages/Home.tsx`)**: Banner Hero tích hợp video YouTube 16:9, khối danh mục gói cước động, Bento Promo Chatbot/Survey, khối Gói cước quan tâm gần đây (Personalized) và Accordion FAQ.
 - **Trang Danh mục gói cước (`client/src/pages/Packages.tsx`)**: Danh sách gói cước phân trang client/server, kết hợp bộ lọc `AdvancedFilter` và công cụ tìm kiếm `PackageSearch`.
 - **Trang Chi tiết gói cước (`client/src/pages/PackageDetail.tsx`)**: Chi tiết thông số data, gọi thoại, cú pháp SMS đăng ký/hủy và gợi ý các gói cước tương tự.
@@ -134,6 +143,7 @@ Hệ thống được thiết kế theo phong cách hiện đại (Vibrant Dark/
 - **Trang Admin (`client/src/pages/Admin/`)**: `Dashboard.tsx`, `Packages.tsx`, `Users.tsx`, `Deposits.tsx`, `ChatHistory.tsx`, `Contacts.tsx`, `Surveys.tsx`.
 
 ### 2. Các Thành Phần Giao Diện Chính (Components)
+
 - `PackageCard`: Card hiển thị gói cước chuẩn hóa. Tên gói (`pkg.ten`) nằm ở góc trên bên trái, Badge **🔥 HOT** nằm góc trên bên phải nếu `dohot === 'Hot'`. Tự động phân tách dòng Data đa dụng (Wifi 📶) và dòng Data Meta (Globe 🌐).
 - `PackageSearch`: Thanh tìm kiếm từ khóa kèm nút xóa "X" hỗ trợ debounce.
 - `AdvancedFilter`: Drawer/Panel lọc đa điều kiện theo loại gói, giá cước và chu kỳ.
@@ -151,7 +161,9 @@ Hệ thống được thiết kế theo phong cách hiện đại (Vibrant Dark/
 > ⚠️ **LƯU Ý:** Danh sách bên dưới liệt kê CHÍNH XÁC các trường dữ liệu (fields) **thực sự xuất hiện trong các Document lưu trữ thực tế tại MongoDB**. Không bổ sung các field suy đoán hoặc field khai báo ở Schema nhưng không có dữ liệu thực tế.
 
 ### 1. Collection `goi_cuoc`
+
 Danh sách các field thực tế trong Document:
+
 - `_id` (ObjectId)
 - `package_id` (Number)
 - `ma_goi` (String)
@@ -182,7 +194,9 @@ Danh sách các field thực tế trong Document:
 - `updatedAt` (String / Date)
 
 ### 2. Collection `user_activities`
+
 Danh sách các field thực tế trong Document:
+
 - `_id` (ObjectId)
 - `activity_id` (Number / null)
 - `user_id` (Number / null)
@@ -196,7 +210,9 @@ Danh sách các field thực tế trong Document:
 - `__v` (Number)
 
 ### 3. Collection `accounts`
+
 Danh sách các field thực tế trong Document:
+
 - `_id` (ObjectId)
 - `user_id` (Number)
 - `fullname` (String)
@@ -212,7 +228,9 @@ Danh sách các field thực tế trong Document:
 - `email` (String)
 
 ### 4. Collection `user_subscriptions`
+
 Danh sách các field thực tế trong Document:
+
 - `_id` (ObjectId)
 - `userId` (Number)
 - `packageId` (Number)
@@ -236,7 +254,9 @@ Danh sách các field thực tế trong Document:
 - `__v` (Number)
 
 ### 5. Collection `compare_histories`
+
 Danh sách các field thực tế trong Document:
+
 - `_id` (ObjectId)
 - `session_id` (String)
 - `user_id` (Number / null)
@@ -257,7 +277,9 @@ Danh sách các field thực tế trong Document:
 - `__v` (Number)
 
 ### 6. Collection `contacts`
+
 Danh sách các field thực tế trong Document:
+
 - `_id` (ObjectId)
 - `contact_id` (String)
 - `user_id` (Number / null)
@@ -277,7 +299,9 @@ Danh sách các field thực tế trong Document:
 - `__v` (Number)
 
 ### 7. Collection `deposits`
+
 Danh sách các field thực tế trong Document:
+
 - `_id` (ObjectId)
 - `deposit_id` (Number)
 - `user_id` (Number)
@@ -294,7 +318,9 @@ Danh sách các field thực tế trong Document:
 - `__v` (Number)
 
 ### 8. Collection `notifications`
+
 Danh sách các field thực tế trong Document:
+
 - `_id` (ObjectId)
 - `userId` (Number)
 - `title` (String)
@@ -308,7 +334,9 @@ Danh sách các field thực tế trong Document:
 - `__v` (Number)
 
 ### 9. Collection `chat_histories`
+
 Danh sách các field thực tế trong Document:
+
 - `_id` (ObjectId)
 - `userId` (ObjectId / String / null)
 - `sender` (String: `user`, `bot`)
@@ -326,7 +354,9 @@ Danh sách các field thực tế trong Document:
 - `__v` (Number)
 
 ### 10. Collection `chatbot_configs`
+
 Danh sách các field thực tế trong Document:
+
 - `_id` (ObjectId)
 - `systemPrompt` (String)
 - `trainingKeywords` (Array of Objects: `{ keyword, response, suggestedPackageId, _id }`)
@@ -336,7 +366,9 @@ Danh sách các field thực tế trong Document:
 - `__v` (Number)
 
 ### 11. Collection `survey_configs`
+
 Danh sách các field thực tế trong Document:
+
 - `_id` (ObjectId)
 - `title` (String)
 - `description` (String)
@@ -350,7 +382,9 @@ Danh sách các field thực tế trong Document:
 - `__v` (Number)
 
 ### 12. Collection `survey_histories`
+
 Danh sách các field thực tế trong Document:
+
 - `_id` (ObjectId)
 - `userId` (Number / null)
 - `answers` (Object)
@@ -364,7 +398,9 @@ Danh sách các field thực tế trong Document:
 - `__v` (Number)
 
 ### 13. Collection `package_features`
+
 Danh sách các field thực tế trong Document:
+
 - `_id` (ObjectId)
 - `package_id` (Number)
 - `ma_goi` (String)
@@ -394,7 +430,9 @@ Danh sách các field thực tế trong Document:
 - `__v` (Number)
 
 ### 14. Collection `otp_codes`
+
 Danh sách các field thực tế trong Document:
+
 - `_id` (ObjectId)
 - `phone_number` (String / null)
 - `email` (String)
