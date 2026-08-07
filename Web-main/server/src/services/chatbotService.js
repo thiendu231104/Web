@@ -4,6 +4,7 @@ const intentParser = require('./chatbot/intentParser');
 const { matchPackages } = require('./chatbot/packageMatcher');
 const { buildPrompt } = require('./chatbot/promptBuilder');
 const { generateContent } = require('./ai/ai.service');
+const { resolveSessionPackages } = require('./chatbot/sessionService');
 
 const chatbotService = {
   getConfig: async () => {
@@ -33,15 +34,19 @@ const chatbotService = {
   },
 
   /**
-   * Luồng xử lý Pure RAG Architecture Chatbot AI:
-   * BƯỚC 1: intentParser.js (Pass 1 - Trích xuất JSON Intent)
-   * BƯỚC 2: packageMatcher.js (Step 3 - Pure RAG Retrieval Top 3-5 gói cước liên quan nhất)
-   * BƯỚC 3: promptBuilder.js & AI (Pass 2 - Grounded Response Generation) & Lưu ChatHistory
+   * Luồng xử lý Session Memory RAG Chatbot AI:
+   *
+   * BƯỚC 1: intentParser.js (Pass 1 NLU — Trích xuất JSON Intent)
+   * BƯỚC 2: sessionService.js (Session Memory — Xác định REFINEMENT hay NEW SESSION)
+   *   - Nếu REFINEMENT: Lọc candidatePackages hiện tại theo requirement mới → KHÔNG query DB lại
+   *   - Nếu NEW SESSION: Đóng session cũ → Query full DB → Tạo session mới → Lưu candidatePackageIds
+   * BƯỚC 3: promptBuilder.js & AI (Pass 2 — Grounded Response từ packages đã resolve)
+   * BƯỚC 4: Lưu ChatHistory
    */
   processMessage: async (message, userId = null, sessionId = null, guestInfo = null) => {
-    console.time('[Chatbot Pure RAG] Pipeline Total');
+    console.time('[Chatbot Session RAG] Pipeline Total');
     try {
-      console.log('[Chatbot Pure RAG] Step 1: Receiving user message:', message);
+      console.log('[Chatbot Session RAG] Step 1: Receiving user message:', message);
 
       // Lấy lịch sử trò chuyện gần đây (10 câu gần nhất)
       let historyQuery = { isDeleted: { $ne: true } };
@@ -85,32 +90,51 @@ const chatbotService = {
       }
 
       // BƯỚC 1: Pass 1 NLU Intent Extraction
-      console.log('[Chatbot Pure RAG] Step 2: Pass 1 NLU Intent Extraction...');
+      console.log('[Chatbot Session RAG] Step 2: Pass 1 NLU Intent Extraction...');
       const intent = await intentParser(message, recentHistory);
-      console.log('[Chatbot Pure RAG] Extracted Intent JSON:', JSON.stringify(intent));
+      console.log('[Chatbot Session RAG] Extracted Intent JSON:', JSON.stringify(intent));
 
-      // BƯỚC 2: Pure RAG Package Retrieval
-      console.log('[Chatbot Pure RAG] Step 3: Pure RAG Retrieval from MongoDB...');
       let matchedPackages = [];
+      let sessionMode = 'NEW_SESSION';
 
-      if (intent.is_general_or_greeting !== true) {
-        const matchResult = await matchPackages(intent);
-        matchedPackages = matchResult.packages || [];
+      if (intent.is_general_or_greeting === true) {
+        // Greeting: bỏ qua session logic, không cần package retrieval
+        console.log('[Chatbot Session RAG] Greeting detected. Bypassing session & package retrieval.');
+      } else {
+        // BƯỚC 2: Session Memory Resolution
+        console.log('[Chatbot Session RAG] Step 3: Session Memory Resolution...');
+
+        /**
+         * fullDbSearchFn — Pure RAG search trên toàn bộ MongoDB.
+         * Được gọi khi cần tạo NEW SESSION hoặc không có session ACTIVE.
+         * sessionService gọi hàm này một cách trừu tượng, không biết nội dung bên trong.
+         */
+        const fullDbSearchFn = async (requirements) => {
+          const result = await matchPackages(requirements);
+          return result.packages || [];
+        };
+
+        const sessionResult = await resolveSessionPackages(
+          userId,
+          sessionId,
+          intent,
+          fullDbSearchFn
+        );
+
+        matchedPackages = sessionResult.packages || [];
+        sessionMode = sessionResult.sessionMode;
+
+        console.log(`[Chatbot Session RAG] Session Mode: ${sessionMode} | Matched: ${matchedPackages.length} packages:`, matchedPackages.map(p => p.ma_goi));
       }
-      console.log('[Chatbot Pure RAG] Matched packages count:', matchedPackages.length, matchedPackages.map(p => p.ma_goi));
 
+      // BƯỚC 3: Pass 2 Response Generation
       let replyText = '';
       if (intent.is_general_or_greeting === true) {
-        console.log('[Chatbot Pure RAG] Bypassing packages. Generating greeting response...');
-        const systemPrompt = "Bạn là Trợ lý tư vấn gói cước Viettel thân thiện, chuyên nghiệp. Hãy phản hồi ngắn gọn, lịch sự đối với các câu chào hỏi/tán gẫu và hướng người dùng hỏi về gói cước di động Viettel.";
-        const userPrompt = `Lịch sử trò chuyện gần đây:
-${recentHistory.length > 0 ? recentHistory.map(h => `${h.sender === 'user' ? 'Khách hàng' : 'Trợ lý'}: ${h.text}`).join('\n') : '(Không có)'}
-
-Tin nhắn mới nhất của người dùng: "${message}"`;
+        const systemPrompt = 'Bạn là Trợ lý tư vấn gói cước Viettel thân thiện, chuyên nghiệp. Hãy phản hồi ngắn gọn, lịch sự đối với các câu chào hỏi/tán gẫu và hướng người dùng hỏi về gói cước di động Viettel.';
+        const userPrompt = `Lịch sử trò chuyện gần đây:\n${recentHistory.length > 0 ? recentHistory.map(h => `${h.sender === 'user' ? 'Khách hàng' : 'Trợ lý'}: ${h.text}`).join('\n') : '(Không có)'}\n\nTin nhắn mới nhất của người dùng: "${message}"`;
         replyText = await generateContent(userPrompt, systemPrompt);
       } else {
-        // BƯỚC 3: Pass 2 Response Generation từ Pure Context
-        console.log('[Chatbot Pure RAG] Step 4: Pass 2 Response Generation...');
+        console.log('[Chatbot Session RAG] Step 4: Pass 2 Response Generation...');
         const promptObj = buildPrompt(message, matchedPackages, intent, recentHistory);
         replyText = await generateContent(promptObj.userPrompt, promptObj.systemInstruction);
       }
@@ -124,7 +148,7 @@ Tin nhắn mới nhất của người dùng: "${message}"`;
         };
       }
 
-      // Lưu câu trả lời của Bot vào MongoDB
+      // BƯỚC 4: Lưu câu trả lời của Bot vào MongoDB
       try {
         await ChatHistory.create({
           userId: userId || null,
@@ -141,7 +165,7 @@ Tin nhắn mới nhất của người dùng: "${message}"`;
         console.error('[Chatbot] Error saving bot chat history:', historyErr.message);
       }
 
-      console.timeEnd('[Chatbot Pure RAG] Pipeline Total');
+      console.timeEnd('[Chatbot Session RAG] Pipeline Total');
 
       return {
         success: true,
@@ -149,16 +173,17 @@ Tin nhắn mới nhất của người dùng: "${message}"`;
         message: replyText,
         packages: matchedPackages,
         recommendedPackages: matchedPackages,
-        suggestedAction
+        suggestedAction,
+        sessionMode
       };
 
     } catch (error) {
-      console.timeEnd('[Chatbot Pure RAG] Pipeline Total');
-      console.error('[Chatbot Pure RAG] Pipeline Error:', error);
+      console.timeEnd('[Chatbot Session RAG] Pipeline Total');
+      console.error('[Chatbot Session RAG] Pipeline Error:', error);
       return {
         success: false,
         text: 'Dạ, hiện tại hệ thống chatbot đang gặp sự cố kết nối. Vui lòng thử lại sau ít phút.',
-        message: 'Dạ, hiện tại hệ thống chatbot đang gặp sự cố kết lộ. Vui lòng thử lại sau ít phút.',
+        message: 'Dạ, hiện tại hệ thống chatbot đang gặp sự cố kết nối. Vui lòng thử lại sau ít phút.',
         packages: [],
         recommendedPackages: []
       };
